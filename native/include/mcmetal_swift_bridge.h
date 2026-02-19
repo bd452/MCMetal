@@ -71,10 +71,36 @@ int32_t mcmetal_swift_set_viewport_state(
     float min_depth,
     float max_depth);
 
+int32_t mcmetal_swift_draw(
+    int32_t mode,
+    int32_t first,
+    int32_t count);
+
 int32_t mcmetal_swift_draw_indexed(
     int32_t mode,
     int32_t count,
     int32_t index_type);
+
+int64_t mcmetal_swift_create_buffer(
+    int32_t usage,
+    int32_t size,
+    const void *initial_data,
+    int32_t initial_data_length);
+
+int32_t mcmetal_swift_update_buffer(
+    int64_t handle,
+    int32_t offset,
+    const void *data,
+    int32_t data_length);
+
+int32_t mcmetal_swift_destroy_buffer(
+    int64_t handle);
+
+int64_t mcmetal_swift_register_vertex_descriptor(
+    int32_t stride_bytes,
+    int32_t attribute_count,
+    const int32_t *packed_elements,
+    int32_t packed_int_count);
 
 void mcmetal_swift_shutdown(void);
 

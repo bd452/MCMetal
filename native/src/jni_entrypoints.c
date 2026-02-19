@@ -182,6 +182,20 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetVi
       (float)max_depth);
 }
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDraw(
+    JNIEnv *env,
+    jclass clazz,
+    jint mode,
+    jint first,
+    jint count) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_draw(
+      (int32_t)mode,
+      (int32_t)first,
+      (int32_t)count);
+}
+
 JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDrawIndexed(
     JNIEnv *env,
     jclass clazz,
@@ -194,6 +208,88 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDrawI
       (int32_t)mode,
       (int32_t)count,
       (int32_t)index_type);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCreateBuffer(
+    JNIEnv *env,
+    jclass clazz,
+    jint usage,
+    jint size,
+    jobject initial_data,
+    jint initial_data_length) {
+  (void)clazz;
+  const void *initial_data_ptr = NULL;
+  if (initial_data != NULL) {
+    initial_data_ptr = (*env)->GetDirectBufferAddress(env, initial_data);
+    if (initial_data_ptr == NULL && initial_data_length > 0) {
+      return (jlong)0;
+    }
+  }
+  return (jlong)mcmetal_swift_create_buffer(
+      (int32_t)usage,
+      (int32_t)size,
+      initial_data_ptr,
+      (int32_t)initial_data_length);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdateBuffer(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle,
+    jint offset,
+    jobject data,
+    jint data_length) {
+  (void)clazz;
+  const void *data_ptr = NULL;
+  if (data != NULL) {
+    data_ptr = (*env)->GetDirectBufferAddress(env, data);
+    if (data_ptr == NULL && data_length > 0) {
+      return (jint)2;
+    }
+  }
+  return (jint)mcmetal_swift_update_buffer(
+      (int64_t)handle,
+      (int32_t)offset,
+      data_ptr,
+      (int32_t)data_length);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyBuffer(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_destroy_buffer((int64_t)handle);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
+    JNIEnv *env,
+    jclass clazz,
+    jint stride_bytes,
+    jint attribute_count,
+    jobject packed_elements,
+    jint packed_byte_length) {
+  (void)clazz;
+  if (stride_bytes <= 0 || attribute_count <= 0 || packed_elements == NULL || packed_byte_length <= 0) {
+    return (jlong)0;
+  }
+
+  const int32_t *packed_ptr = (const int32_t *)(*env)->GetDirectBufferAddress(env, packed_elements);
+  if (packed_ptr == NULL) {
+    return (jlong)0;
+  }
+
+  int32_t packed_int_count = (int32_t)(packed_byte_length / (jint)sizeof(int32_t));
+  if (packed_int_count <= 0) {
+    return (jlong)0;
+  }
+
+  return (jlong)mcmetal_swift_register_vertex_descriptor(
+      (int32_t)stride_bytes,
+      (int32_t)attribute_count,
+      packed_ptr,
+      packed_int_count);
 }
 
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(

@@ -98,12 +98,48 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetVi
     jfloat min_depth,
     jfloat max_depth);
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDraw(
+    JNIEnv *env,
+    jclass clazz,
+    jint mode,
+    jint first,
+    jint count);
+
 JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDrawIndexed(
     JNIEnv *env,
     jclass clazz,
     jint mode,
     jint count,
     jint index_type);
+
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCreateBuffer(
+    JNIEnv *env,
+    jclass clazz,
+    jint usage,
+    jint size,
+    jobject initial_data,
+    jint initial_data_length);
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdateBuffer(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle,
+    jint offset,
+    jobject data,
+    jint data_length);
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyBuffer(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle);
+
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
+    JNIEnv *env,
+    jclass clazz,
+    jint stride_bytes,
+    jint attribute_count,
+    jobject packed_elements,
+    jint packed_byte_length);
 
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
