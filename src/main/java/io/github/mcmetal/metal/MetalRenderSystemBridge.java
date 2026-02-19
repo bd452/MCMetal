@@ -13,6 +13,8 @@ import java.util.function.IntSupplier;
  * <p>Phase 2 progressively wires these callbacks to the native state tracker.
  */
 public final class MetalRenderSystemBridge {
+    private static final boolean DRAW_SUBMISSION_ENABLED = Boolean.getBoolean("mcmetal.phase2.enableDrawSubmission");
+
     private static volatile boolean blendEnabled;
     private static volatile int blendSrcRgb = 1;
     private static volatile int blendDstRgb;
@@ -337,7 +339,10 @@ public final class MetalRenderSystemBridge {
         if (!isBridgeActive() || count <= 0) {
             return;
         }
-        // Draw forwarding is added in subsequent Phase 2 checkpoints.
+        if (!DRAW_SUBMISSION_ENABLED) {
+            return;
+        }
+        submitState("nativeDrawIndexed", () -> NativeApi.nativeDrawIndexed(mode, count, indexType));
     }
 
     private static boolean isBridgeActive() {

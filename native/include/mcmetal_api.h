@@ -98,6 +98,13 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetVi
     jfloat min_depth,
     jfloat max_depth);
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDrawIndexed(
+    JNIEnv *env,
+    jclass clazz,
+    jint mode,
+    jint count,
+    jint index_type);
+
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
     jclass clazz);

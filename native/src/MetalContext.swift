@@ -263,6 +263,23 @@ private func mapStencilOperation(_ glStencilOperation: Int32) -> MTLStencilOpera
     }
 }
 
+private func mapPrimitiveType(_ glMode: Int32) -> MTLPrimitiveType? {
+    switch glMode {
+    case 0x0000:
+        return .point
+    case 0x0001:
+        return .line
+    case 0x0003:
+        return .lineStrip
+    case 0x0004:
+        return .triangle
+    case 0x0005:
+        return .triangleStrip
+    default:
+        return nil
+    }
+}
+
 private func createPipelineState(context: MetalContextState, key: PipelineKey) -> MTLRenderPipelineState? {
     if let cachedPipeline = context.pipelineCache[key] {
         return cachedPipeline
@@ -724,6 +741,89 @@ public func mcmetal_swift_set_viewport_state(
         )
         return kStatusOk
     }
+}
+
+@_cdecl("mcmetal_swift_draw_indexed")
+public func mcmetal_swift_draw_indexed(
+    _ mode: Int32,
+    _ count: Int32,
+    _ indexType: Int32
+) -> Int32 {
+    if count <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    if indexType != 0x1401 && indexType != 0x1403 && indexType != 0x1405 {
+        return kStatusInvalidArgument
+    }
+
+    guard let primitiveType = mapPrimitiveType(mode) else {
+        return kStatusInvalidArgument
+    }
+
+    stateLock.lock()
+    guard let context = contextState else {
+        stateLock.unlock()
+        return kStatusInitializationFailed
+    }
+    let layer = context.layer
+    let commandQueue = context.commandQueue
+    let debugFlags = context.debugFlags
+    stateLock.unlock()
+
+    let drawStatus: Int32 = autoreleasepool {
+        guard let drawable = layer.nextDrawable() else {
+            return kStatusInitializationFailed
+        }
+
+        let renderPass = MTLRenderPassDescriptor()
+        guard let colorAttachment = renderPass.colorAttachments[0] else {
+            return kStatusInitializationFailed
+        }
+        colorAttachment.texture = drawable.texture
+        colorAttachment.loadAction = .load
+        colorAttachment.storeAction = .store
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            return kStatusInitializationFailed
+        }
+
+        if (debugFlags & kDebugFlagLabels) != 0 {
+            commandBuffer.label = "MCMetal Draw Command Buffer"
+        }
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPass) else {
+            return kStatusInitializationFailed
+        }
+
+        let setupStatus = configureEncoderState(context: context, encoder: encoder, primitiveType: mode)
+        if setupStatus != kStatusOk {
+            encoder.endEncoding()
+            return setupStatus
+        }
+
+        if (debugFlags & kDebugFlagLabels) != 0 {
+            encoder.label = "MCMetal Draw Encoder"
+            encoder.pushDebugGroup("MCMetal Draw Indexed (Simple)")
+        }
+
+        encoder.drawPrimitives(
+            type: primitiveType,
+            vertexStart: 0,
+            vertexCount: max(Int(count), 1)
+        )
+
+        if (debugFlags & kDebugFlagLabels) != 0 {
+            encoder.popDebugGroup()
+        }
+
+        encoder.endEncoding()
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+        return kStatusOk
+    }
+
+    return drawStatus
 }
 
 @_cdecl("mcmetal_swift_shutdown")
