@@ -6,6 +6,8 @@ Deliver a Fabric mod for macOS that replaces Minecraft's OpenGL rendering path w
 
 The purpose is to remove dependence on Apple's deprecated OpenGL 4.1 stack and achieve better frame pacing, throughput, and long-term platform viability.
 
+Governance decisions for scope boundaries, support matrix, release quality gates, and milestone ownership are published in [PROJECT_GOVERNANCE.md](PROJECT_GOVERNANCE.md). Active mitigation tracking is maintained in [RISK_REGISTER.md](RISK_REGISTER.md).
+
 ## 2. Product Goals
 
 1. **Functional parity with vanilla rendering** on supported Minecraft + Fabric versions.

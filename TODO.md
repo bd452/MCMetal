@@ -1,12 +1,12 @@
 # MCMetal Project Plan
 
-- [ ] 0. Project Governance, Scope, and Readiness
-  - [ ] Confirm supported target matrix (Minecraft version, Fabric loader/API version, macOS versions, Apple Silicon + Intel coverage).
-  - [ ] Finalize and publish scope boundaries (Metal backend substitution only, no non-rendering subsystem rewrite).
-  - [ ] Finalize and publish non-goals (no cross-platform graphics backend, no compatibility with rendering-overhaul mods).
-  - [ ] Define Definition of Done for MVP, performance, and release quality gates.
-  - [ ] Establish milestone owners and review cadence.
-  - [ ] Create and maintain a risk register with mitigation owners.
+- [x] 0. Project Governance, Scope, and Readiness
+  - [x] Confirm supported target matrix (Minecraft version, Fabric loader/API version, macOS versions, Apple Silicon + Intel coverage).
+  - [x] Finalize and publish scope boundaries (Metal backend substitution only, no non-rendering subsystem rewrite).
+  - [x] Finalize and publish non-goals (no cross-platform graphics backend, no compatibility with rendering-overhaul mods).
+  - [x] Define Definition of Done for MVP, performance, and release quality gates.
+  - [x] Establish milestone owners and review cadence.
+  - [x] Create and maintain a risk register with mitigation owners.
 
 - [ ] 1. Phase 0 - Foundation and Build Integration
   - [ ] Create/validate Fabric mod skeleton and package structure.
