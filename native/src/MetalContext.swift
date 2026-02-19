@@ -152,6 +152,54 @@ private func withContextState(_ body: (MetalContextState) -> Int32) -> Int32 {
     return body(context)
 }
 
+private func shouldLogStateTransitions(_ context: MetalContextState) -> Bool {
+    return (context.debugFlags & kDebugFlagLabels) != 0 || (context.debugFlags & kDebugFlagValidation) != 0
+}
+
+private func logStateTransition(
+    context: MetalContextState,
+    operation: String,
+    changed: Bool
+) {
+    guard changed, shouldLogStateTransitions(context) else {
+        return
+    }
+
+    let pipelineKey = context.renderStateTracker.makePipelineKey(
+        colorPixelFormat: Int32(bitPattern: UInt32(context.layer.pixelFormat.rawValue)),
+        sampleCount: 1,
+        primitiveType: 0x0004
+    )
+    let depthStencilKey = context.renderStateTracker.makeDepthStencilKey()
+
+    NSLog(
+        "event=metal_phase2 phase=state_transition operation=%@ revision=%llu pipeline_key_hash=%016llx depth_stencil_key_hash=%016llx",
+        operation,
+        context.renderStateTracker.revision,
+        pipelineKey.stableHash,
+        depthStencilKey.stableHash
+    )
+}
+
+private func validateSnapshotForEncoder(_ snapshot: RenderStateSnapshot) -> Bool {
+    if snapshot.viewport.width <= 0 || snapshot.viewport.height <= 0 {
+        assertionFailure("Viewport dimensions must be positive before encoder setup.")
+        return false
+    }
+
+    if snapshot.viewport.minDepth > snapshot.viewport.maxDepth {
+        assertionFailure("Viewport depth range is invalid (minDepth > maxDepth).")
+        return false
+    }
+
+    if snapshot.scissor.enabled && (snapshot.scissor.width <= 0 || snapshot.scissor.height <= 0) {
+        assertionFailure("Scissor dimensions must be positive when enabled.")
+        return false
+    }
+
+    return true
+}
+
 private func mapBlendFactor(_ glFactor: Int32) -> MTLBlendFactor {
     switch glFactor {
     case 0x0:
@@ -352,6 +400,10 @@ private func configureEncoderState(
     primitiveType: Int32
 ) -> Int32 {
     let snapshot = context.renderStateTracker.snapshot
+    if !validateSnapshotForEncoder(snapshot) {
+        return kStatusInvalidArgument
+    }
+
     let pipelineKey = context.renderStateTracker.makePipelineKey(
         colorPixelFormat: Int32(bitPattern: UInt32(context.layer.pixelFormat.rawValue)),
         sampleCount: 1,
@@ -606,7 +658,8 @@ public func mcmetal_swift_render_demo_frame(
 @_cdecl("mcmetal_swift_set_blend_enabled")
 public func mcmetal_swift_set_blend_enabled(_ enabled: Int32) -> Int32 {
     return withContextState { context in
-        _ = context.renderStateTracker.setBlendEnabled(enabled != 0)
+        let changed = context.renderStateTracker.setBlendEnabled(enabled != 0)
+        logStateTransition(context: context, operation: "set_blend_enabled", changed: changed)
         return kStatusOk
     }
 }
@@ -619,12 +672,13 @@ public func mcmetal_swift_set_blend_func(
     _ dstAlpha: Int32
 ) -> Int32 {
     return withContextState { context in
-        _ = context.renderStateTracker.setBlendFunc(
+        let changed = context.renderStateTracker.setBlendFunc(
             srcRGB: srcRGB,
             dstRGB: dstRGB,
             srcAlpha: srcAlpha,
             dstAlpha: dstAlpha
         )
+        logStateTransition(context: context, operation: "set_blend_func", changed: changed)
         return kStatusOk
     }
 }
@@ -635,7 +689,8 @@ public func mcmetal_swift_set_blend_equation(
     _ alphaEquation: Int32
 ) -> Int32 {
     return withContextState { context in
-        _ = context.renderStateTracker.setBlendEquation(rgb: rgbEquation, alpha: alphaEquation)
+        let changed = context.renderStateTracker.setBlendEquation(rgb: rgbEquation, alpha: alphaEquation)
+        logStateTransition(context: context, operation: "set_blend_equation", changed: changed)
         return kStatusOk
     }
 }
@@ -647,11 +702,12 @@ public func mcmetal_swift_set_depth_state(
     _ depthCompareFunction: Int32
 ) -> Int32 {
     return withContextState { context in
-        _ = context.renderStateTracker.setDepthState(
+        let changed = context.renderStateTracker.setDepthState(
             testEnabled: depthTestEnabled != 0,
             writeEnabled: depthWriteEnabled != 0,
             compareFunction: depthCompareFunction
         )
+        logStateTransition(context: context, operation: "set_depth_state", changed: changed)
         return kStatusOk
     }
 }
@@ -668,7 +724,7 @@ public func mcmetal_swift_set_stencil_state(
     _ stencilDpPass: Int32
 ) -> Int32 {
     return withContextState { context in
-        _ = context.renderStateTracker.setStencilState(
+        let changed = context.renderStateTracker.setStencilState(
             enabled: stencilEnabled != 0,
             function: stencilFunction,
             reference: stencilReference,
@@ -678,6 +734,7 @@ public func mcmetal_swift_set_stencil_state(
             dpfail: stencilDpFail,
             dppass: stencilDpPass
         )
+        logStateTransition(context: context, operation: "set_stencil_state", changed: changed)
         return kStatusOk
     }
 }
@@ -688,7 +745,8 @@ public func mcmetal_swift_set_cull_state(
     _ cullMode: Int32
 ) -> Int32 {
     return withContextState { context in
-        _ = context.renderStateTracker.setCullState(enabled: cullEnabled != 0, mode: cullMode)
+        let changed = context.renderStateTracker.setCullState(enabled: cullEnabled != 0, mode: cullMode)
+        logStateTransition(context: context, operation: "set_cull_state", changed: changed)
         return kStatusOk
     }
 }
@@ -702,17 +760,19 @@ public func mcmetal_swift_set_scissor_state(
     _ height: Int32
 ) -> Int32 {
     if scissorEnabled != 0 && (width <= 0 || height <= 0) {
+        assertionFailure("Scissor dimensions must be positive when enabled.")
         return kStatusInvalidArgument
     }
 
     return withContextState { context in
-        _ = context.renderStateTracker.setScissor(
+        let changed = context.renderStateTracker.setScissor(
             enabled: scissorEnabled != 0,
             x: x,
             y: y,
             width: width,
             height: height
         )
+        logStateTransition(context: context, operation: "set_scissor_state", changed: changed)
         return kStatusOk
     }
 }
@@ -727,11 +787,16 @@ public func mcmetal_swift_set_viewport_state(
     _ maxDepth: Float
 ) -> Int32 {
     if width <= 0 || height <= 0 {
+        assertionFailure("Viewport dimensions must be positive.")
+        return kStatusInvalidArgument
+    }
+    if minDepth > maxDepth {
+        assertionFailure("Viewport depth range is invalid (minDepth > maxDepth).")
         return kStatusInvalidArgument
     }
 
     return withContextState { context in
-        _ = context.renderStateTracker.setViewport(
+        let changed = context.renderStateTracker.setViewport(
             x: x,
             y: y,
             width: width,
@@ -739,6 +804,7 @@ public func mcmetal_swift_set_viewport_state(
             minDepth: minDepth,
             maxDepth: maxDepth
         )
+        logStateTransition(context: context, operation: "set_viewport_state", changed: changed)
         return kStatusOk
     }
 }
@@ -750,14 +816,17 @@ public func mcmetal_swift_draw_indexed(
     _ indexType: Int32
 ) -> Int32 {
     if count <= 0 {
+        assertionFailure("Draw count must be positive.")
         return kStatusInvalidArgument
     }
 
     if indexType != 0x1401 && indexType != 0x1403 && indexType != 0x1405 {
+        assertionFailure("Unsupported GL index type.")
         return kStatusInvalidArgument
     }
 
     guard let primitiveType = mapPrimitiveType(mode) else {
+        assertionFailure("Unsupported GL primitive mode.")
         return kStatusInvalidArgument
     }
 

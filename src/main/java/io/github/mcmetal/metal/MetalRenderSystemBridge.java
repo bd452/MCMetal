@@ -4,6 +4,8 @@ import io.github.mcmetal.metal.bridge.HostPlatform;
 import io.github.mcmetal.metal.bridge.NativeApi;
 import io.github.mcmetal.metal.bridge.NativeBridgeException;
 import io.github.mcmetal.metal.bridge.NativeStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.function.IntSupplier;
 
@@ -13,7 +15,9 @@ import java.util.function.IntSupplier;
  * <p>Phase 2 progressively wires these callbacks to the native state tracker.
  */
 public final class MetalRenderSystemBridge {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MetalRenderSystemBridge.class);
     private static final boolean DRAW_SUBMISSION_ENABLED = Boolean.getBoolean("mcmetal.phase2.enableDrawSubmission");
+    private static final boolean DEBUG_STATE_LOGS = Boolean.getBoolean("mcmetal.phase2.debugStateTransitions");
 
     private static volatile boolean blendEnabled;
     private static volatile int blendSrcRgb = 1;
@@ -210,6 +214,17 @@ public final class MetalRenderSystemBridge {
         }
         int clampedWidth = Math.max(width, 1);
         int clampedHeight = Math.max(height, 1);
+        if (DEBUG_STATE_LOGS && (clampedWidth != width || clampedHeight != height)) {
+            LOGGER.debug(
+                "event=metal_phase2 phase=state_validation operation=scissor_clamp x={} y={} width={} height={} clamped_width={} clamped_height={}",
+                x,
+                y,
+                width,
+                height,
+                clampedWidth,
+                clampedHeight
+            );
+        }
         if (scissorEnabled && scissorX == x && scissorY == y
             && scissorWidth == clampedWidth && scissorHeight == clampedHeight) {
             return;
@@ -245,6 +260,17 @@ public final class MetalRenderSystemBridge {
         }
         int clampedWidth = Math.max(width, 1);
         int clampedHeight = Math.max(height, 1);
+        if (DEBUG_STATE_LOGS && (clampedWidth != width || clampedHeight != height)) {
+            LOGGER.debug(
+                "event=metal_phase2 phase=state_validation operation=viewport_clamp x={} y={} width={} height={} clamped_width={} clamped_height={}",
+                x,
+                y,
+                width,
+                height,
+                clampedWidth,
+                clampedHeight
+            );
+        }
         if (viewportX == x && viewportY == y && viewportWidth == clampedWidth && viewportHeight == clampedHeight) {
             return;
         }
@@ -350,6 +376,9 @@ public final class MetalRenderSystemBridge {
     }
 
     private static void submitState(String operation, IntSupplier nativeCall) {
+        if (DEBUG_STATE_LOGS) {
+            LOGGER.debug("event=metal_phase2 phase=state_submit operation={}", operation);
+        }
         int statusCode = nativeCall.getAsInt();
         if (NativeStatus.isSuccess(statusCode)) {
             return;
