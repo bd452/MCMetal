@@ -8,4 +8,5 @@ MCMetal is a Fabric-based macOS renderer backend project that replaces Minecraft
 - [Architecture](ARCHITECTURE.md)
 - [Project governance and readiness baseline](PROJECT_GOVERNANCE.md)
 - [Risk register](RISK_REGISTER.md)
+- [Development setup and build prerequisites](DEVELOPMENT.md)
 - [Roadmap checklist](TODO.md)

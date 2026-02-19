@@ -8,16 +8,16 @@
   - [x] Establish milestone owners and review cadence.
   - [x] Create and maintain a risk register with mitigation owners.
 
-- [ ] 1. Phase 0 - Foundation and Build Integration
-  - [ ] Create/validate Fabric mod skeleton and package structure.
-  - [ ] Add Java Metal bridge package with JNI method declarations.
-  - [ ] Create native module layout (`native/`, headers, source folders, build scripts).
-  - [ ] Implement native library bootstrap (`libminecraft_metal.dylib`) build with CMake/Xcode tooling.
-  - [ ] Integrate native build into Gradle lifecycle (build, test, package, publish artifacts).
-  - [ ] Implement startup native loading and version handshake validation.
-  - [ ] Add structured startup logging for native initialization success/failure.
-  - [ ] Add initial CI pipeline to build Java and native artifacts on macOS runners.
-  - [ ] Document local development setup and build prerequisites.
+- [x] 1. Phase 0 - Foundation and Build Integration
+  - [x] Create/validate Fabric mod skeleton and package structure.
+  - [x] Add Java Metal bridge package with JNI method declarations.
+  - [x] Create native module layout (`native/`, headers, source folders, build scripts).
+  - [x] Implement native library bootstrap (`libminecraft_metal.dylib`) build with CMake/Xcode tooling.
+  - [x] Integrate native build into Gradle lifecycle (build, test, package, publish artifacts).
+  - [x] Implement startup native loading and version handshake validation.
+  - [x] Add structured startup logging for native initialization success/failure.
+  - [x] Add initial CI pipeline to build Java and native artifacts on macOS runners.
+  - [x] Document local development setup and build prerequisites.
 
 - [ ] 2. Phase 1 - Window and Surface Bring-Up
   - [ ] Add window interception and retrieve Cocoa window handle from GLFW.
