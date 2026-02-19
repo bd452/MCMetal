@@ -94,6 +94,10 @@ class MetalBufferUploadBridgeTest {
 
         assertEquals(4, backend.createCalls);
         assertEquals(1, backend.registerDescriptorCalls);
+        assertEquals(0, backend.destroyCalls);
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
+        assertEquals(0, backend.destroyCalls);
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
         assertEquals(2, backend.destroyCalls);
     }
 
@@ -130,6 +134,10 @@ class MetalBufferUploadBridgeTest {
         );
         MetalBufferUploadBridge.onVertexBufferCloseForTests(vertexBuffer);
 
+        assertEquals(0, backend.destroyCalls);
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
+        assertEquals(0, backend.destroyCalls);
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
         assertEquals(2, backend.destroyCalls);
     }
 

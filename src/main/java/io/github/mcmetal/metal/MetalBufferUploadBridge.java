@@ -12,7 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -78,12 +80,15 @@ public final class MetalBufferUploadBridge {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetalBufferUploadBridge.class);
     private static final boolean DEBUG_BUFFER_LOGS = Boolean.getBoolean("mcmetal.phase3.debugBufferBridge");
     private static final boolean DRAW_SUBMISSION_ENABLED = !Boolean.getBoolean("mcmetal.phase3.disableDrawSubmission");
+    private static final int DEFERRED_DESTROY_FRAME_LAG = 2;
     private static final Map<Object, UploadSnapshot> SNAPSHOT_CACHE = Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<Object, NativeBufferRecord> BUFFER_RECORDS = Collections.synchronizedMap(new IdentityHashMap<>());
     private static final Map<VertexFormat, Long> VERTEX_DESCRIPTOR_CACHE = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Deque<DeferredDestroyEntry> DEFERRED_DESTROY_QUEUE = new ArrayDeque<>();
 
     private static volatile NativeBufferBackend nativeBufferBackend = new JniNativeBufferBackend();
     private static volatile Boolean bridgeActiveOverrideForTests;
+    private static volatile long submittedFrame;
 
     private MetalBufferUploadBridge() {
     }
@@ -183,6 +188,10 @@ public final class MetalBufferUploadBridge {
         submitDraw(vertexBufferIdentity);
     }
 
+    static void onFrameSubmittedForTests() {
+        completeFrameAndDrainDeferredQueue();
+    }
+
     static void clearBridgeActiveOverrideForTests() {
         bridgeActiveOverrideForTests = null;
     }
@@ -191,8 +200,12 @@ public final class MetalBufferUploadBridge {
         SNAPSHOT_CACHE.clear();
         BUFFER_RECORDS.clear();
         VERTEX_DESCRIPTOR_CACHE.clear();
+        synchronized (DEFERRED_DESTROY_QUEUE) {
+            DEFERRED_DESTROY_QUEUE.clear();
+        }
         nativeBufferBackend = new JniNativeBufferBackend();
         bridgeActiveOverrideForTests = null;
+        submittedFrame = 0L;
     }
 
     private static void onVertexBufferUploadInternal(
@@ -216,7 +229,7 @@ public final class MetalBufferUploadBridge {
         if (snapshot.indexData != null && snapshot.indexData.remaining() > 0) {
             record.indexAllocation = uploadAllocation(record.indexAllocation, usage, snapshot.indexData, "index");
         } else {
-            destroyAllocation(record.indexAllocation, "nativeDestroyBuffer(index)");
+            releaseAllocationDeferred(record.indexAllocation, "upload:index_reset");
             record.indexAllocation = new BufferAllocation();
         }
 
@@ -294,7 +307,7 @@ public final class MetalBufferUploadBridge {
             current.handle = newHandle;
             current.capacityBytes = requiredBytes;
             if (previousHandle != 0L) {
-                requireSuccess("nativeDestroyBuffer(reallocate:" + label + ")", nativeBufferBackend.destroyBuffer(previousHandle));
+                enqueueDeferredDestroy(previousHandle, "reallocate:" + label);
             }
             return current;
         }
@@ -309,15 +322,15 @@ public final class MetalBufferUploadBridge {
         if (record == null) {
             return;
         }
-        destroyAllocation(record.vertexAllocation, "nativeDestroyBuffer(vertex)");
-        destroyAllocation(record.indexAllocation, "nativeDestroyBuffer(index)");
+        releaseAllocationDeferred(record.vertexAllocation, "close:vertex");
+        releaseAllocationDeferred(record.indexAllocation, "close:index");
     }
 
-    private static void destroyAllocation(BufferAllocation allocation, String operation) {
+    private static void releaseAllocationDeferred(BufferAllocation allocation, String reason) {
         if (allocation.handle == 0L) {
             return;
         }
-        requireSuccess(operation, nativeBufferBackend.destroyBuffer(allocation.handle));
+        enqueueDeferredDestroy(allocation.handle, reason);
         allocation.handle = 0L;
         allocation.capacityBytes = 0;
     }
@@ -343,6 +356,7 @@ public final class MetalBufferUploadBridge {
                 "nativeDrawIndexed",
                 nativeBufferBackend.drawIndexed(snapshot.modeGl, snapshot.indexCount, snapshot.indexTypeGl)
             );
+            completeFrameAndDrainDeferredQueue();
             return;
         }
 
@@ -350,6 +364,7 @@ public final class MetalBufferUploadBridge {
             "nativeDraw",
             nativeBufferBackend.draw(snapshot.modeGl, 0, snapshot.vertexCount)
         );
+        completeFrameAndDrainDeferredQueue();
     }
 
     private static boolean shouldUseIndexedPath(UploadSnapshot snapshot, NativeBufferRecord record) {
@@ -361,6 +376,32 @@ public final class MetalBufferUploadBridge {
 
     private static boolean isSupportedIndexType(int indexTypeGl) {
         return indexTypeGl == 0x1401 || indexTypeGl == 0x1403 || indexTypeGl == 0x1405;
+    }
+
+    private static void enqueueDeferredDestroy(long handle, String reason) {
+        long releaseFrame = submittedFrame + DEFERRED_DESTROY_FRAME_LAG;
+        synchronized (DEFERRED_DESTROY_QUEUE) {
+            DEFERRED_DESTROY_QUEUE.addLast(new DeferredDestroyEntry(handle, releaseFrame, reason));
+        }
+    }
+
+    private static void completeFrameAndDrainDeferredQueue() {
+        submittedFrame += 1;
+
+        while (true) {
+            DeferredDestroyEntry entry;
+            synchronized (DEFERRED_DESTROY_QUEUE) {
+                entry = DEFERRED_DESTROY_QUEUE.peekFirst();
+                if (entry == null || entry.releaseFrame > submittedFrame) {
+                    return;
+                }
+                DEFERRED_DESTROY_QUEUE.removeFirst();
+            }
+            requireSuccess(
+                "nativeDestroyBuffer(deferred:" + entry.reason + ")",
+                nativeBufferBackend.destroyBuffer(entry.handle)
+            );
+        }
     }
 
     @Nullable
@@ -429,6 +470,9 @@ public final class MetalBufferUploadBridge {
     private static final class BufferAllocation {
         private long handle;
         private int capacityBytes;
+    }
+
+    private record DeferredDestroyEntry(long handle, long releaseFrame, String reason) {
     }
 
     private static final class JniNativeBufferBackend implements NativeBufferBackend {
