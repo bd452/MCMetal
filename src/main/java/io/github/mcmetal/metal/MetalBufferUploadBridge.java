@@ -29,6 +29,10 @@ public final class MetalBufferUploadBridge {
         int destroyBuffer(long handle);
 
         long registerVertexDescriptor(int strideBytes, int attributeCount, ByteBuffer packedElements, int packedByteLength);
+
+        int draw(int mode, int first, int count);
+
+        int drawIndexed(int mode, int count, int indexType);
     }
 
     enum BufferUsage {
@@ -73,6 +77,7 @@ public final class MetalBufferUploadBridge {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MetalBufferUploadBridge.class);
     private static final boolean DEBUG_BUFFER_LOGS = Boolean.getBoolean("mcmetal.phase3.debugBufferBridge");
+    private static final boolean DRAW_SUBMISSION_ENABLED = !Boolean.getBoolean("mcmetal.phase3.disableDrawSubmission");
     private static final Map<Object, UploadSnapshot> SNAPSHOT_CACHE = Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<Object, NativeBufferRecord> BUFFER_RECORDS = Collections.synchronizedMap(new IdentityHashMap<>());
     private static final Map<VertexFormat, Long> VERTEX_DESCRIPTOR_CACHE = Collections.synchronizedMap(new WeakHashMap<>());
@@ -122,6 +127,13 @@ public final class MetalBufferUploadBridge {
         closeRecord(vertexBuffer);
     }
 
+    public static void onVertexBufferDraw(VertexBuffer vertexBuffer) {
+        if (!isBridgeActive() || !DRAW_SUBMISSION_ENABLED) {
+            return;
+        }
+        submitDraw(vertexBuffer);
+    }
+
     static void onVertexBufferUploadForTests(
         Object vertexBufferIdentity,
         BufferUsage usage,
@@ -165,6 +177,10 @@ public final class MetalBufferUploadBridge {
 
     static void onVertexBufferCloseForTests(Object vertexBufferIdentity) {
         closeRecord(vertexBufferIdentity);
+    }
+
+    static void onVertexBufferDrawForTests(Object vertexBufferIdentity) {
+        submitDraw(vertexBufferIdentity);
     }
 
     static void clearBridgeActiveOverrideForTests() {
@@ -306,6 +322,47 @@ public final class MetalBufferUploadBridge {
         allocation.capacityBytes = 0;
     }
 
+    private static void submitDraw(Object vertexBufferIdentity) {
+        NativeBufferRecord record = BUFFER_RECORDS.get(vertexBufferIdentity);
+        if (record == null || record.lastSnapshot == null) {
+            return;
+        }
+        UploadSnapshot snapshot = record.lastSnapshot;
+        if (snapshot.vertexCount <= 0) {
+            return;
+        }
+
+        boolean useIndexedPath = shouldUseIndexedPath(snapshot, record);
+        if (useIndexedPath) {
+            if (!isSupportedIndexType(snapshot.indexTypeGl)) {
+                throw new NativeBridgeException(
+                    "Unsupported index type for nativeDrawIndexed: " + snapshot.indexTypeGl
+                );
+            }
+            requireSuccess(
+                "nativeDrawIndexed",
+                nativeBufferBackend.drawIndexed(snapshot.modeGl, snapshot.indexCount, snapshot.indexTypeGl)
+            );
+            return;
+        }
+
+        requireSuccess(
+            "nativeDraw",
+            nativeBufferBackend.draw(snapshot.modeGl, 0, snapshot.vertexCount)
+        );
+    }
+
+    private static boolean shouldUseIndexedPath(UploadSnapshot snapshot, NativeBufferRecord record) {
+        if (record.indexAllocation.handle != 0L) {
+            return true;
+        }
+        return snapshot.indexCount > 0 && snapshot.indexCount != snapshot.vertexCount;
+    }
+
+    private static boolean isSupportedIndexType(int indexTypeGl) {
+        return indexTypeGl == 0x1401 || indexTypeGl == 0x1403 || indexTypeGl == 0x1405;
+    }
+
     @Nullable
     private static UploadSnapshot snapshotFromBuiltBuffer(BuiltBuffer builtBuffer) {
         BuiltBuffer.DrawParameters drawParameters = builtBuffer.getDrawParameters();
@@ -398,6 +455,16 @@ public final class MetalBufferUploadBridge {
                 packedElements,
                 packedByteLength
             );
+        }
+
+        @Override
+        public int draw(int mode, int first, int count) {
+            return NativeApi.nativeDraw(mode, first, count);
+        }
+
+        @Override
+        public int drawIndexed(int mode, int count, int indexType) {
+            return NativeApi.nativeDrawIndexed(mode, count, indexType);
         }
     }
 }

@@ -71,6 +71,11 @@ int32_t mcmetal_swift_set_viewport_state(
     float min_depth,
     float max_depth);
 
+int32_t mcmetal_swift_draw(
+    int32_t mode,
+    int32_t first,
+    int32_t count);
+
 int32_t mcmetal_swift_draw_indexed(
     int32_t mode,
     int32_t count,

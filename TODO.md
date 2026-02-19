@@ -44,7 +44,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Implement static and dynamic `MTLBuffer` allocation strategy.
   - [x] Add ring-buffer/staging strategy for per-frame uploads.
   - [x] Implement vertex descriptor mapping from Blaze3D formats to Metal descriptors.
-  - [ ] Support indexed and non-indexed draw variants with correct index-type handling.
+  - [x] Support indexed and non-indexed draw variants with correct index-type handling.
   - [ ] Add deferred destruction/resource lifetime handling tied to frame completion.
   - [ ] Stress test buffer churn and high draw-count scenes.
 

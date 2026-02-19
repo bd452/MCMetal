@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MetalBufferUploadBridgeTest {
     private final RecordingNativeBackend backend = new RecordingNativeBackend();
@@ -132,17 +133,109 @@ class MetalBufferUploadBridgeTest {
         assertEquals(2, backend.destroyCalls);
     }
 
+    @Test
+    void drawUsesNonIndexedPathWhenIndexCountMatchesVertexCount() {
+        Object vertexBuffer = new Object();
+        MetalBufferUploadBridge.UploadSnapshot snapshot = snapshot(
+            48,
+            0,
+            VertexFormat.DrawMode.TRIANGLES,
+            3,
+            3,
+            VertexFormat.IndexType.SHORT
+        );
+
+        MetalBufferUploadBridge.onVertexBufferUploadForTests(
+            vertexBuffer,
+            MetalBufferUploadBridge.BufferUsage.DYNAMIC,
+            new Object(),
+            snapshot
+        );
+        MetalBufferUploadBridge.onVertexBufferDrawForTests(vertexBuffer);
+
+        assertEquals(1, backend.drawCalls);
+        assertEquals(0, backend.drawIndexedCalls);
+    }
+
+    @Test
+    void drawUsesIndexedPathWhenIndicesArePresent() {
+        Object vertexBuffer = new Object();
+        MetalBufferUploadBridge.UploadSnapshot snapshot = snapshot(
+            64,
+            24,
+            VertexFormat.DrawMode.QUADS,
+            4,
+            6,
+            VertexFormat.IndexType.SHORT
+        );
+
+        MetalBufferUploadBridge.onVertexBufferUploadForTests(
+            vertexBuffer,
+            MetalBufferUploadBridge.BufferUsage.DYNAMIC,
+            new Object(),
+            snapshot
+        );
+        MetalBufferUploadBridge.onVertexBufferDrawForTests(vertexBuffer);
+
+        assertEquals(0, backend.drawCalls);
+        assertEquals(1, backend.drawIndexedCalls);
+    }
+
+    @Test
+    void drawRejectsUnsupportedIndexTypeForIndexedPath() {
+        Object vertexBuffer = new Object();
+        MetalBufferUploadBridge.UploadSnapshot snapshot = new MetalBufferUploadBridge.UploadSnapshot(
+            buffer(32, (byte) 1),
+            buffer(16, (byte) 2),
+            VertexFormats.POSITION_COLOR,
+            VertexFormat.DrawMode.QUADS.glMode,
+            4,
+            6,
+            0xDEAD
+        );
+
+        MetalBufferUploadBridge.onVertexBufferUploadForTests(
+            vertexBuffer,
+            MetalBufferUploadBridge.BufferUsage.DYNAMIC,
+            new Object(),
+            snapshot
+        );
+
+        assertThrows(
+            RuntimeException.class,
+            () -> MetalBufferUploadBridge.onVertexBufferDrawForTests(vertexBuffer)
+        );
+    }
+
     private static MetalBufferUploadBridge.UploadSnapshot snapshot(int vertexBytes, int indexBytes) {
+        return snapshot(
+            vertexBytes,
+            indexBytes,
+            VertexFormat.DrawMode.QUADS,
+            4,
+            6,
+            VertexFormat.IndexType.SHORT
+        );
+    }
+
+    private static MetalBufferUploadBridge.UploadSnapshot snapshot(
+        int vertexBytes,
+        int indexBytes,
+        VertexFormat.DrawMode drawMode,
+        int vertexCount,
+        int indexCount,
+        VertexFormat.IndexType indexType
+    ) {
         ByteBuffer vertex = buffer(vertexBytes, (byte) 7);
         ByteBuffer index = indexBytes > 0 ? buffer(indexBytes, (byte) 42) : null;
         return MetalBufferUploadBridge.createSnapshotForTests(
             vertex,
             index,
             VertexFormats.POSITION_COLOR,
-            VertexFormat.DrawMode.QUADS,
-            4,
-            6,
-            VertexFormat.IndexType.SHORT
+            drawMode,
+            vertexCount,
+            indexCount,
+            indexType
         );
     }
 
@@ -161,6 +254,8 @@ class MetalBufferUploadBridgeTest {
         private int updateCalls;
         private int destroyCalls;
         private int registerDescriptorCalls;
+        private int drawCalls;
+        private int drawIndexedCalls;
         private final List<Integer> createdSizes = new ArrayList<>();
 
         @Override
@@ -186,6 +281,18 @@ class MetalBufferUploadBridgeTest {
         public long registerVertexDescriptor(int strideBytes, int attributeCount, ByteBuffer packedElements, int packedByteLength) {
             registerDescriptorCalls++;
             return nextHandle++;
+        }
+
+        @Override
+        public int draw(int mode, int first, int count) {
+            drawCalls++;
+            return 0;
+        }
+
+        @Override
+        public int drawIndexed(int mode, int count, int indexType) {
+            drawIndexedCalls++;
+            return 0;
         }
     }
 }

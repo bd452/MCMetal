@@ -1033,6 +1033,87 @@ public func mcmetal_swift_set_viewport_state(
     }
 }
 
+@_cdecl("mcmetal_swift_draw")
+public func mcmetal_swift_draw(
+    _ mode: Int32,
+    _ first: Int32,
+    _ count: Int32
+) -> Int32 {
+    if first < 0 || count <= 0 {
+        assertionFailure("Draw range must be valid.")
+        return kStatusInvalidArgument
+    }
+
+    guard let primitiveType = mapPrimitiveType(mode) else {
+        assertionFailure("Unsupported GL primitive mode.")
+        return kStatusInvalidArgument
+    }
+
+    stateLock.lock()
+    guard let context = contextState else {
+        stateLock.unlock()
+        return kStatusInitializationFailed
+    }
+    let layer = context.layer
+    let commandQueue = context.commandQueue
+    let debugFlags = context.debugFlags
+    stateLock.unlock()
+
+    let drawStatus: Int32 = autoreleasepool {
+        guard let drawable = layer.nextDrawable() else {
+            return kStatusInitializationFailed
+        }
+
+        let renderPass = MTLRenderPassDescriptor()
+        guard let colorAttachment = renderPass.colorAttachments[0] else {
+            return kStatusInitializationFailed
+        }
+        colorAttachment.texture = drawable.texture
+        colorAttachment.loadAction = .load
+        colorAttachment.storeAction = .store
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            return kStatusInitializationFailed
+        }
+        if (debugFlags & kDebugFlagLabels) != 0 {
+            commandBuffer.label = "MCMetal Draw Command Buffer"
+        }
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPass) else {
+            return kStatusInitializationFailed
+        }
+
+        let setupStatus = configureEncoderState(context: context, encoder: encoder, primitiveType: mode)
+        if setupStatus != kStatusOk {
+            encoder.endEncoding()
+            return setupStatus
+        }
+
+        if (debugFlags & kDebugFlagLabels) != 0 {
+            encoder.label = "MCMetal Draw Encoder"
+            encoder.pushDebugGroup("MCMetal Draw (Non-Indexed)")
+        }
+
+        encoder.drawPrimitives(
+            type: primitiveType,
+            vertexStart: Int(first),
+            vertexCount: max(Int(count), 1)
+        )
+
+        if (debugFlags & kDebugFlagLabels) != 0 {
+            encoder.popDebugGroup()
+        }
+
+        encoder.endEncoding()
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+        markFrameSubmitted()
+        return kStatusOk
+    }
+
+    return drawStatus
+}
+
 @_cdecl("mcmetal_swift_draw_indexed")
 public func mcmetal_swift_draw_indexed(
     _ mode: Int32,

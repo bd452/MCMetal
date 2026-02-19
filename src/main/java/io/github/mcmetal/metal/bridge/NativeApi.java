@@ -44,6 +44,8 @@ public final class NativeApi {
 
     public static native int nativeSetViewportState(int x, int y, int width, int height, float minDepth, float maxDepth);
 
+    public static native int nativeDraw(int mode, int first, int count);
+
     public static native int nativeDrawIndexed(int mode, int count, int indexType);
 
     public static native long nativeCreateBuffer(int usage, int size, ByteBuffer initialData, int initialDataLength);

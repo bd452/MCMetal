@@ -25,4 +25,9 @@ abstract class VertexBufferMixin {
     private void mcmetal$releaseNativeBuffers(CallbackInfo ci) {
         MetalBufferUploadBridge.onVertexBufferClose((VertexBuffer) (Object) this);
     }
+
+    @Inject(method = "draw", at = @At("HEAD"))
+    private void mcmetal$submitNativeDraw(CallbackInfo ci) {
+        MetalBufferUploadBridge.onVertexBufferDraw((VertexBuffer) (Object) this);
+    }
 }
