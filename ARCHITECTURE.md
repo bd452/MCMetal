@@ -10,11 +10,15 @@
    - Mixins should mostly forward and adapt data.
    - Native layer owns GPU policy, caching, synchronization, and diagnostics.
 
-3. **Deterministic state translation**
+3. **Swift-native implementation with stable C ABI**
+   - Cocoa/Metal orchestration is implemented in Swift.
+   - Java interop remains a narrow JNI boundary through C ABI symbols.
+
+4. **Deterministic state translation**
    - Convert OpenGL's implicit mutable state into explicit immutable pipeline/pass descriptors.
    - Make state transitions auditable and cacheable.
 
-4. **Fail loudly in development, fail safely in production**
+5. **Fail loudly in development, fail safely in production**
    - Rich debug logging and assertions in dev mode.
    - User-safe fallback behavior (error messaging, graceful disable) in production mode.
 
@@ -29,17 +33,18 @@ Fabric mixins (Java interception layer)
    |
 Java Metal API facade (JNI declarations + marshaling helpers)
    |
-JNI boundary
+JNI boundary (C ABI exports)
    |
 Native bridge (libminecraft_metal.dylib)
-   |-- MetalContext (device/queue/layer/frame lifecycle)
-   |-- StateTracker (GL-like state model snapshot)
-   |-- PipelineCache (render/depth/stencil/blend/vertex format keys)
-   |-- BufferManager (dynamic/static MTLBuffer allocation)
-   |-- TextureManager (textures, samplers, upload path)
-   |-- RenderTargetManager (off-screen attachments and pass descriptors)
-   |-- ShaderManager (GLSL->SPIR-V->MSL + reflection + function cache)
-   |-- CommandRecorder (encoders, resource binding, draw submission)
+   |-- C JNI shim (jni_entrypoints.c)
+   |-- SwiftMetalRuntime (device/queue/layer/frame lifecycle)
+   |-- SwiftStateTracker (GL-like state model snapshot)
+   |-- SwiftPipelineCache (render/depth/stencil/blend/vertex format keys)
+   |-- SwiftBufferManager (dynamic/static MTLBuffer allocation)
+   |-- SwiftTextureManager (textures, samplers, upload path)
+   |-- SwiftRenderTargetManager (off-screen attachments and pass descriptors)
+   |-- SwiftShaderManager (GLSL->SPIR-V->MSL + reflection + function cache)
+   |-- SwiftCommandRecorder (encoders, resource binding, draw submission)
    |
 Apple Metal runtime (MTLDevice, MTLCommandQueue, CAMetalLayer)
 ```
@@ -48,7 +53,7 @@ Apple Metal runtime (MTLDevice, MTLCommandQueue, CAMetalLayer)
 
 ## 3. Java Layer Design (Fabric + Mixins)
 
-## 3.1 Intercept Targets
+### 3.1 Intercept Targets
 
 Priority interception points:
 
@@ -66,7 +71,7 @@ Priority interception points:
 - `Window`
   - Native surface initialization and resize flow
 
-## 3.2 Java Module Responsibilities
+### 3.2 Java Module Responsibilities
 
 1. **Mixin adapters**
    - Hook methods at stable call sites.
@@ -90,13 +95,13 @@ Priority interception points:
 
 Use a narrow, explicit C ABI surface. Java methods should avoid frequent tiny calls when batching is possible.
 
-## 4.1 Core API Groups
+### 4.1 Core API Groups
 
 1. **Context and frame lifecycle**
-   - `nativeInit(windowHandle, width, height, debugFlags)`
+   - `nativeInitialize(windowHandle, width, height, debugFlags)`
    - `nativeBeginFrame(frameIndex)`
    - `nativeEndFrame(frameIndex)`
-   - `nativeResize(width, height)`
+   - `nativeResize(width, height, scaleFactor, fullscreen)`
    - `nativeShutdown()`
 
 2. **Render state**
@@ -130,24 +135,24 @@ Use a narrow, explicit C ABI surface. Java methods should avoid frequent tiny ca
    - `nativeDraw(mode, first, count)`
    - `nativeDrawIndexed(mode, indexType, indexOffset, count, baseVertex)`
 
-## 4.2 Marshaling Rules
+### 4.2 Marshaling Rules
 
-- Prefer **direct `ByteBuffer`** and pinned memory for bulk transfers.
+- Prefer direct `ByteBuffer` and pinned memory for bulk transfers.
 - Pass immutable descriptors as POD-like structs (packed fields) to native.
 - Avoid Java object traversal from native; resolve all references in Java first.
 - Maintain stable integer IDs for uniforms/attributes/textures to avoid per-frame string lookups.
 
 ---
 
-## 5. Native Layer Internal Architecture
+## 5. Native Swift Layer Internal Architecture
 
-## 5.1 MetalContext
+### 5.1 SwiftMetalRuntime
 
 Owns process-global rendering primitives:
 
-- `id<MTLDevice> device`
-- `id<MTLCommandQueue> queue`
-- `CAMetalLayer* layer`
+- `MTLDevice` device
+- `MTLCommandQueue` queue
+- `CAMetalLayer` layer
 - Current frame resources:
   - drawable
   - command buffer
@@ -158,7 +163,7 @@ Key operations:
 - Handle resize/pixel ratio updates.
 - Create/present command buffers with debug labels and completion handlers.
 
-## 5.2 StateTracker
+### 5.2 SwiftStateTracker
 
 Tracks a normalized GL-like state snapshot:
 
@@ -171,11 +176,11 @@ Tracks a normalized GL-like state snapshot:
 
 The tracker generates:
 
-1. **PipelineKey** (immutable key for `MTLRenderPipelineState`)
-2. **DepthStencilKey** (for `MTLDepthStencilState`)
-3. **Pass descriptor parameters** (color/depth/stencil load/store actions)
+1. `PipelineKey` (immutable key for `MTLRenderPipelineState`)
+2. `DepthStencilKey` (for `MTLDepthStencilState`)
+3. Pass descriptor parameters (color/depth/stencil load/store actions)
 
-## 5.3 PipelineCache
+### 5.3 SwiftPipelineCache
 
 Caches expensive immutable objects:
 
@@ -185,49 +190,49 @@ Caches expensive immutable objects:
   - color/depth formats
   - blend config
   - sample count
-- `MTLDepthStencilState` keyed by depth/stencil config.
-- `MTLSamplerState` keyed by filter/address/aniso modes.
+- `MTLDepthStencilState` keyed by depth/stencil config
+- `MTLSamplerState` keyed by filter/address/aniso modes
 
 Cache behavior:
-- Lock-free/striped map where possible.
+- Low-contention synchronization strategy where possible.
 - LRU/size cap guardrails for pathological shader churn.
 - Optional on-disk metadata cache for warm startup.
 
-## 5.4 BufferManager
+### 5.4 SwiftBufferManager
 
 Buffer classes:
 
-1. **Static buffers** for long-lived meshes.
-2. **Dynamic/ring buffers** for per-frame streaming geometry and uniforms.
-3. **Staging uploads** where direct write is not ideal.
+1. Static buffers for long-lived meshes.
+2. Dynamic/ring buffers for per-frame streaming geometry and uniforms.
+3. Staging uploads where direct write is not ideal.
 
 Policies:
 - Triple-buffered dynamic regions to reduce CPU/GPU contention.
 - Deferred destruction queue tied to command buffer completion.
 - Alignment guarantees for Metal requirements (including uniform offsets).
 
-## 5.5 TextureManager
+### 5.5 SwiftTextureManager
 
 Responsibilities:
-- Pixel format mapping (Minecraft/GL formats -> `MTLPixelFormat`).
-- 2D texture creation/update/mipmap generation policy.
-- Sampler association and reuse.
-- Atlas update support with region-based uploads.
+- Pixel format mapping (Minecraft/GL formats -> `MTLPixelFormat`)
+- 2D texture creation/update/mipmap generation policy
+- Sampler association and reuse
+- Atlas update support with region-based uploads
 
 Special handling:
-- sRGB correctness for UI and world textures.
-- Depth and depth-stencil textures for shadow and post passes.
+- sRGB correctness for UI and world textures
+- Depth and depth-stencil textures for shadow and post passes
 
-## 5.6 RenderTargetManager
+### 5.6 SwiftRenderTargetManager
 
 Maps `RenderTarget` semantics to Metal attachments:
 
-- Create color/depth textures backing each target.
-- Build render pass descriptors on bind.
-- Handle clear/load/store behavior equivalent to Blaze3D expectations.
-- Support target resizing and reallocation on window size change.
+- Create color/depth textures backing each target
+- Build render pass descriptors on bind
+- Handle clear/load/store behavior equivalent to Blaze3D expectations
+- Support target resizing and reallocation on window size change
 
-## 5.7 ShaderManager
+### 5.7 SwiftShaderManager
 
 Pipeline:
 
@@ -247,7 +252,7 @@ Caching:
 - Hash by shader source + defines + target profile.
 - Persist translated MSL/reflection artifacts on disk in cache directory.
 
-## 5.8 CommandRecorder
+### 5.8 SwiftCommandRecorder
 
 Converts state + resource bindings + draw requests into Metal commands:
 
@@ -266,7 +271,7 @@ Converts state + resource bindings + draw requests into Metal commands:
    - Reset transient allocators/ring pointers for current frame slot.
 
 2. **Record passes**
-   - Apply RenderSystem state deltas via StateTracker.
+   - Apply RenderSystem state deltas via `SwiftStateTracker`.
    - Bind program/pipeline/resources.
    - Execute draw calls for world, UI, particles, post-processing.
 
@@ -280,14 +285,14 @@ Converts state + resource bindings + draw requests into Metal commands:
 
 ## 7. OpenGL -> Metal Semantic Mapping
 
-## 7.1 State Model Translation
+### 7.1 State Model Translation
 
-- OpenGL mutable global state -> explicit key/value snapshot in StateTracker.
+- OpenGL mutable global state -> explicit key/value snapshot in `SwiftStateTracker`.
 - `glUseProgram` + fixed state -> pipeline cache lookup/creation.
 - `glBindFramebuffer` -> render pass descriptor selection.
 - `glClear*` -> render pass load actions or explicit clear draws depending on timing.
 
-## 7.2 Resource Binding
+### 7.2 Resource Binding
 
 - GLSL uniform names/locations are transformed into stable binding indices.
 - Java sets uniform by logical ID; native writes into:
@@ -295,7 +300,7 @@ Converts state + resource bindings + draw requests into Metal commands:
   - dedicated constant buffers with offsets.
 - Texture units become explicit texture/sampler bindings in encoder state.
 
-## 7.3 Draw Modes
+### 7.3 Draw Modes
 
 Map Minecraft draw modes to `MTLPrimitiveType`, validating unsupported combinations early.
 
@@ -304,7 +309,7 @@ Map Minecraft draw modes to `MTLPrimitiveType`, validating unsupported combinati
 ## 8. Windowing and Surface Integration
 
 1. Obtain `NSWindow*` via GLFW (`glfwGetCocoaWindow`).
-2. Attach/configure `CAMetalLayer` on content view:
+2. Attach/configure `CAMetalLayer` on content view in Swift:
    - pixel format
    - drawable size
    - framebufferOnly and vsync/present mode policy
@@ -318,6 +323,7 @@ Map Minecraft draw modes to `MTLPrimitiveType`, validating unsupported combinati
 ## 9. Threading and Synchronization
 
 - Rendering commands are expected from Minecraft render thread.
+- AppKit-facing window/layer mutations run on the macOS main thread.
 - Metal object creation may occur on worker threads only where safe and controlled.
 - CPU/GPU sync approach:
   - avoid `waitUntilCompleted` in hot path,
@@ -353,63 +359,51 @@ Map Minecraft draw modes to `MTLPrimitiveType`, validating unsupported combinati
 
 ---
 
-## 12. Suggested Repository Layout
+## 12. Repository Layout (Swift-Native)
 
 ```text
 /src/main/java/.../metal/
   MetalBootstrap.java
-  mixin/
-    RenderSystemMixin.java
-    VertexBufferMixin.java
-    ShaderInstanceMixin.java
-    RenderTargetMixin.java
-    WindowMixin.java
+  MetalPhaseOneBridge.java
   bridge/
     NativeApi.java
-    NativeHandles.java
-    DataMarshal.java
+    NativeStatus.java
+    NativeDebugFlags.java
 
 /native/
   CMakeLists.txt
   include/
     mcmetal_api.h
-    mcmetal_types.h
+    mcmetal_swift_bridge.h
+    mcmetal_version.h
   src/
-    metal_context.mm
-    state_tracker.cpp
-    pipeline_cache.mm
-    buffer_manager.mm
-    texture_manager.mm
-    render_target_manager.mm
-    shader_manager.cpp
-    command_recorder.mm
-    jni_entrypoints.cpp
-  third_party/
-    glslang/
-    spirv-cross/
+    jni_entrypoints.c
+    MetalContext.swift
+  scripts/
+    build_macos.sh
 ```
 
 ---
 
 ## 13. Verification and Test Strategy
 
-## 13.1 Unit/Component Tests (native)
+### 13.1 Unit/Component Tests (native)
 
 - Pipeline key hashing and equality correctness.
 - Format mapping tables.
 - Shader reflection and binding map generation.
 - Resource lifecycle/deferred free queue logic.
 
-## 13.2 Integration Tests
+### 13.2 Integration Tests
 
-- Headless/native smoke tests for shader compile and pipeline creation.
+- Native smoke tests for shader compile and pipeline creation.
 - In-game automated scenarios:
   - world render,
   - UI overlays,
   - particles/transparency,
   - post-processing passes.
 
-## 13.3 Performance Validation
+### 13.3 Performance Validation
 
 - Baseline OpenGL vs Metal on identical scenes/settings.
 - Capture:
@@ -443,4 +437,3 @@ Map Minecraft draw modes to `MTLPrimitiveType`, validating unsupported combinati
 3. Disk cache invalidation strategy across Minecraft/mod updates.
 4. Whether to expose optional debug UI/commands for renderer metrics.
 5. How strictly to preserve byte-for-byte visual parity versus "close enough" tolerance.
-

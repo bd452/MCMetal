@@ -32,6 +32,7 @@ The implementation has three major layers:
    - Stays thin: no heavy renderer policy in mixins.
 
 2. **Native bridge (`libminecraft_metal.dylib`)**
+   - Implemented as a Swift-native Metal runtime with a narrow C/JNI shim.
    - Owns `MTLDevice`, command queue, frame lifecycle, resource managers.
    - Translates OpenGL-style implicit state to explicit Metal pipeline/encoder state.
    - Maintains caches for render pipeline states and reusable GPU resources.
@@ -67,12 +68,12 @@ The implementation has three major layers:
 
 **Outcomes**
 - Fabric mod skeleton with native loader hook.
-- Native macOS library build (CMake/Xcode or equivalent) integrated into Gradle packaging.
+- Native macOS library build (CMake/Xcode + Swift toolchain) integrated into Gradle packaging.
 - Basic JNI handshake and version checks.
 
 **Deliverables**
 - `metal-bridge` Java package with native method stubs.
-- `native/` module producing `libminecraft_metal.dylib`.
+- `native/` module producing `libminecraft_metal.dylib` from Swift sources and C ABI shims.
 - Startup log proving native library initialization.
 
 ## Phase 1 - Window/Surface Bring-Up
@@ -83,7 +84,7 @@ The implementation has three major layers:
 - Acquire drawable and present per frame.
 
 **Deliverables**
-- Native window bootstrap using `glfwGetCocoaWindow`.
+- Native window bootstrap using `glfwGetCocoaWindow` and Swift/AppKit surface setup.
 - Frame clear color demo rendered through Metal.
 - Resize handling wired to drawable size updates.
 

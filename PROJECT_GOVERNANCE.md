@@ -25,6 +25,11 @@ The project scope is strictly limited to rendering backend substitution:
 3. Keep Java mixins/adapters thin and place rendering policy in native code.
 4. Limit changes to rendering-adjacent classes and startup integration needed to load the native backend.
 
+Native implementation baseline:
+
+- Swift-first native runtime for Metal/Cocoa integration.
+- Stable C ABI JNI boundary for Java interop and compatibility.
+
 Out of scope for implementation in this roadmap:
 
 - Rewriting non-rendering systems (audio, networking, world logic, input, persistence).
