@@ -51,8 +51,8 @@ void ApplyValidationEnvironment(std::uint32_t debug_flags) {
     return;
   }
 
-  setenv("MTL_DEBUG_LAYER", "1", 0);
-  setenv("METAL_DEVICE_WRAPPER_TYPE", "1", 0);
+  (void)setenv("MTL_DEBUG_LAYER", "1", 0);
+  (void)setenv("METAL_DEVICE_WRAPPER_TYPE", "1", 0);
 }
 
 void ApplyLayerGeometryLocked() {
@@ -143,7 +143,7 @@ int InitializeMetalContext(std::int64_t cocoa_window_handle,
   g_state.width = ClampDimension(width);
   g_state.height = ClampDimension(height);
   g_state.scale_factor = ClampScale(static_cast<float>(window.backingScaleFactor));
-  g_state.fullscreen = [window styleMask] & NSWindowStyleMaskFullScreen;
+  g_state.fullscreen = ([window styleMask] & NSWindowStyleMaskFullScreen) != 0;
   g_state.debug_flags = static_cast<std::uint32_t>(debug_flags);
   g_state.initialized = true;
 
