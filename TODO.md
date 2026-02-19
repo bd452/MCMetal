@@ -34,7 +34,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Implement Java mixins for core `RenderSystem` state calls.
   - [x] Build normalized Swift-native state tracker (blend, depth, stencil, cull, scissor, viewport).
   - [x] Implement deterministic state-to-key conversion for pipeline/depth-stencil lookup.
-  - [ ] Add command encoder setup based on tracked state snapshots.
+  - [x] Add command encoder setup based on tracked state snapshots.
   - [ ] Implement basic draw submission for simple world/UI primitives.
   - [ ] Validate state transition correctness with debug assertions and logs.
   - [ ] Add regression checks for frequent state-change scenarios.

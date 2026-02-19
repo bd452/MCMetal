@@ -11,6 +11,32 @@ private let kStatusInitializationFailed: Int32 = 3
 
 private let kDebugFlagValidation: Int32 = 1 << 0
 private let kDebugFlagLabels: Int32 = 1 << 1
+private let kDemoVertexFunctionName = "mcmetal_vertex_main"
+private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
+private let kDemoShaderSource = """
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexOut {
+    float4 position [[position]];
+};
+
+vertex VertexOut mcmetal_vertex_main(uint vertexId [[vertex_id]]) {
+    const float2 positions[3] = {
+        float2(-0.75, -0.75),
+        float2(0.0, 0.75),
+        float2(0.75, -0.75)
+    };
+
+    VertexOut out;
+    out.position = float4(positions[vertexId % 3], 0.0, 1.0);
+    return out;
+}
+
+fragment float4 mcmetal_fragment_main() {
+    return float4(0.9, 0.9, 0.95, 1.0);
+}
+"""
 
 private final class MetalContextState {
     let window: NSWindow
@@ -18,6 +44,9 @@ private final class MetalContextState {
     let layer: CAMetalLayer
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
+    let shaderLibrary: MTLLibrary
+    let vertexFunction: MTLFunction
+    let fragmentFunction: MTLFunction
     let debugFlags: Int32
     let renderStateTracker: RenderStateTracker
 
@@ -25,6 +54,8 @@ private final class MetalContextState {
     var height: Int32
     var scaleFactor: CGFloat
     var fullscreen: Bool
+    var pipelineCache: [PipelineKey: MTLRenderPipelineState] = [:]
+    var depthStencilCache: [DepthStencilKey: MTLDepthStencilState] = [:]
 
     init(
         window: NSWindow,
@@ -32,6 +63,9 @@ private final class MetalContextState {
         layer: CAMetalLayer,
         device: MTLDevice,
         commandQueue: MTLCommandQueue,
+        shaderLibrary: MTLLibrary,
+        vertexFunction: MTLFunction,
+        fragmentFunction: MTLFunction,
         renderStateTracker: RenderStateTracker,
         width: Int32,
         height: Int32,
@@ -44,6 +78,9 @@ private final class MetalContextState {
         self.layer = layer
         self.device = device
         self.commandQueue = commandQueue
+        self.shaderLibrary = shaderLibrary
+        self.vertexFunction = vertexFunction
+        self.fragmentFunction = fragmentFunction
         self.renderStateTracker = renderStateTracker
         self.width = width
         self.height = height
@@ -115,6 +152,240 @@ private func withContextState(_ body: (MetalContextState) -> Int32) -> Int32 {
     return body(context)
 }
 
+private func mapBlendFactor(_ glFactor: Int32) -> MTLBlendFactor {
+    switch glFactor {
+    case 0x0:
+        return .zero
+    case 0x1:
+        return .one
+    case 0x0300:
+        return .sourceColor
+    case 0x0301:
+        return .oneMinusSourceColor
+    case 0x0302:
+        return .sourceAlpha
+    case 0x0303:
+        return .oneMinusSourceAlpha
+    case 0x0304:
+        return .destinationAlpha
+    case 0x0305:
+        return .oneMinusDestinationAlpha
+    case 0x0306:
+        return .destinationColor
+    case 0x0307:
+        return .oneMinusDestinationColor
+    case 0x0308:
+        return .sourceAlphaSaturated
+    case 0x8001:
+        return .blendColor
+    case 0x8002:
+        return .oneMinusBlendColor
+    case 0x8003:
+        return .blendAlpha
+    case 0x8004:
+        return .oneMinusBlendAlpha
+    default:
+        return .one
+    }
+}
+
+private func mapBlendOperation(_ glEquation: Int32) -> MTLBlendOperation {
+    switch glEquation {
+    case 0x8006:
+        return .add
+    case 0x800A:
+        return .subtract
+    case 0x800B:
+        return .reverseSubtract
+    case 0x8007:
+        return .min
+    case 0x8008:
+        return .max
+    default:
+        return .add
+    }
+}
+
+private func mapCompareFunction(_ glCompare: Int32) -> MTLCompareFunction {
+    switch glCompare {
+    case 0x0200:
+        return .never
+    case 0x0201:
+        return .less
+    case 0x0202:
+        return .equal
+    case 0x0203:
+        return .lessEqual
+    case 0x0204:
+        return .greater
+    case 0x0205:
+        return .notEqual
+    case 0x0206:
+        return .greaterEqual
+    case 0x0207:
+        return .always
+    default:
+        return .lessEqual
+    }
+}
+
+private func mapCullMode(_ glCullMode: Int32) -> MTLCullMode {
+    switch glCullMode {
+    case 0x0404:
+        return .front
+    case 0x0405:
+        return .back
+    default:
+        return .none
+    }
+}
+
+private func mapStencilOperation(_ glStencilOperation: Int32) -> MTLStencilOperation {
+    switch glStencilOperation {
+    case 0x0:
+        return .zero
+    case 0x1E00:
+        return .keep
+    case 0x1E01:
+        return .replace
+    case 0x1E02:
+        return .incrementClamp
+    case 0x1E03:
+        return .decrementClamp
+    case 0x150A:
+        return .invert
+    case 0x8507:
+        return .incrementWrap
+    case 0x8508:
+        return .decrementWrap
+    default:
+        return .keep
+    }
+}
+
+private func createPipelineState(context: MetalContextState, key: PipelineKey) -> MTLRenderPipelineState? {
+    if let cachedPipeline = context.pipelineCache[key] {
+        return cachedPipeline
+    }
+
+    let descriptor = MTLRenderPipelineDescriptor()
+    descriptor.vertexFunction = context.vertexFunction
+    descriptor.fragmentFunction = context.fragmentFunction
+    descriptor.sampleCount = Int(max(key.sampleCount, 1))
+
+    guard let colorAttachment = descriptor.colorAttachments[0] else {
+        return nil
+    }
+
+    let pixelFormatRawValue = UInt(max(key.colorPixelFormat, 0))
+    colorAttachment.pixelFormat = MTLPixelFormat(rawValue: pixelFormatRawValue)
+
+    if key.blendEnabled {
+        colorAttachment.isBlendingEnabled = true
+        colorAttachment.sourceRGBBlendFactor = mapBlendFactor(key.blendSrcRGB)
+        colorAttachment.destinationRGBBlendFactor = mapBlendFactor(key.blendDstRGB)
+        colorAttachment.sourceAlphaBlendFactor = mapBlendFactor(key.blendSrcAlpha)
+        colorAttachment.destinationAlphaBlendFactor = mapBlendFactor(key.blendDstAlpha)
+        colorAttachment.rgbBlendOperation = mapBlendOperation(key.blendEquationRGB)
+        colorAttachment.alphaBlendOperation = mapBlendOperation(key.blendEquationAlpha)
+    } else {
+        colorAttachment.isBlendingEnabled = false
+    }
+
+    guard let pipelineState = try? context.device.makeRenderPipelineState(descriptor: descriptor) else {
+        return nil
+    }
+
+    context.pipelineCache[key] = pipelineState
+    return pipelineState
+}
+
+private func createDepthStencilState(context: MetalContextState, key: DepthStencilKey) -> MTLDepthStencilState? {
+    if let cachedDepthStencilState = context.depthStencilCache[key] {
+        return cachedDepthStencilState
+    }
+
+    let descriptor = MTLDepthStencilDescriptor()
+    descriptor.depthCompareFunction = key.depthTestEnabled ? mapCompareFunction(key.depthCompareFunction) : .always
+    descriptor.isDepthWriteEnabled = key.depthTestEnabled && key.depthWriteEnabled
+
+    if key.stencilEnabled {
+        let stencilDescriptor = MTLStencilDescriptor()
+        stencilDescriptor.stencilCompareFunction = mapCompareFunction(key.stencilFunction)
+        stencilDescriptor.readMask = UInt32(bitPattern: key.stencilCompareMask)
+        stencilDescriptor.writeMask = UInt32(bitPattern: key.stencilWriteMask)
+        stencilDescriptor.stencilFailureOperation = mapStencilOperation(key.stencilSFail)
+        stencilDescriptor.depthFailureOperation = mapStencilOperation(key.stencilDpFail)
+        stencilDescriptor.depthStencilPassOperation = mapStencilOperation(key.stencilDpPass)
+        descriptor.frontFaceStencil = stencilDescriptor
+        descriptor.backFaceStencil = stencilDescriptor
+    }
+
+    guard let depthStencilState = context.device.makeDepthStencilState(descriptor: descriptor) else {
+        return nil
+    }
+
+    context.depthStencilCache[key] = depthStencilState
+    return depthStencilState
+}
+
+private func configureEncoderState(
+    context: MetalContextState,
+    encoder: MTLRenderCommandEncoder,
+    primitiveType: Int32
+) -> Int32 {
+    let snapshot = context.renderStateTracker.snapshot
+    let pipelineKey = context.renderStateTracker.makePipelineKey(
+        colorPixelFormat: Int32(bitPattern: UInt32(context.layer.pixelFormat.rawValue)),
+        sampleCount: 1,
+        primitiveType: primitiveType
+    )
+    let depthStencilKey = context.renderStateTracker.makeDepthStencilKey()
+
+    guard let pipelineState = createPipelineState(context: context, key: pipelineKey) else {
+        return kStatusInitializationFailed
+    }
+    guard let depthStencilState = createDepthStencilState(context: context, key: depthStencilKey) else {
+        return kStatusInitializationFailed
+    }
+
+    encoder.setRenderPipelineState(pipelineState)
+    encoder.setDepthStencilState(depthStencilState)
+
+    if snapshot.raster.cullEnabled {
+        encoder.setCullMode(mapCullMode(snapshot.raster.cullMode))
+    } else {
+        encoder.setCullMode(.none)
+    }
+    encoder.setFrontFacing(.counterClockwise)
+
+    if snapshot.scissor.enabled {
+        let scissorRect = MTLScissorRect(
+            x: max(Int(snapshot.scissor.x), 0),
+            y: max(Int(snapshot.scissor.y), 0),
+            width: max(Int(snapshot.scissor.width), 1),
+            height: max(Int(snapshot.scissor.height), 1)
+        )
+        encoder.setScissorRect(scissorRect)
+    }
+
+    let viewport = MTLViewport(
+        originX: Double(snapshot.viewport.x),
+        originY: Double(snapshot.viewport.y),
+        width: Double(max(snapshot.viewport.width, 1)),
+        height: Double(max(snapshot.viewport.height, 1)),
+        znear: Double(snapshot.viewport.minDepth),
+        zfar: Double(snapshot.viewport.maxDepth)
+    )
+    encoder.setViewport(viewport)
+
+    if depthStencilKey.stencilEnabled {
+        encoder.setStencilReferenceValue(UInt32(bitPattern: depthStencilKey.stencilReference))
+    }
+
+    return kStatusOk
+}
+
 @_cdecl("mcmetal_swift_initialize")
 public func mcmetal_swift_initialize(
     _ cocoaWindowHandle: Int64,
@@ -153,6 +424,16 @@ public func mcmetal_swift_initialize(
             return nil
         }
 
+        guard let shaderLibrary = try? device.makeLibrary(source: kDemoShaderSource, options: nil) else {
+            return nil
+        }
+        guard let vertexFunction = shaderLibrary.makeFunction(name: kDemoVertexFunctionName) else {
+            return nil
+        }
+        guard let fragmentFunction = shaderLibrary.makeFunction(name: kDemoFragmentFunctionName) else {
+            return nil
+        }
+
         let layer = CAMetalLayer()
         layer.device = device
         layer.pixelFormat = .bgra8Unorm
@@ -183,6 +464,9 @@ public func mcmetal_swift_initialize(
             layer: layer,
             device: device,
             commandQueue: commandQueue,
+            shaderLibrary: shaderLibrary,
+            vertexFunction: vertexFunction,
+            fragmentFunction: fragmentFunction,
             renderStateTracker: tracker,
             width: clampDimension(width),
             height: clampDimension(height),
@@ -279,6 +563,12 @@ public func mcmetal_swift_render_demo_frame(
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPass) else {
             return kStatusInitializationFailed
+        }
+
+        let setupStatus = configureEncoderState(context: context, encoder: encoder, primitiveType: 0x0004)
+        if setupStatus != kStatusOk {
+            encoder.endEncoding()
+            return setupStatus
         }
 
         if (debugFlags & kDebugFlagLabels) != 0 {
