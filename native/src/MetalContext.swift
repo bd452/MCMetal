@@ -11,6 +11,10 @@ private let kStatusInitializationFailed: Int32 = 3
 
 private let kDebugFlagValidation: Int32 = 1 << 0
 private let kDebugFlagLabels: Int32 = 1 << 1
+private let kBufferUsageStatic: Int32 = 0
+private let kBufferUsageDynamic: Int32 = 1
+private let kDynamicBufferSlotCount: Int = 3
+private let kDynamicBufferAlignment: Int = 256
 private let kDemoVertexFunctionName = "mcmetal_vertex_main"
 private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
 private let kDemoShaderSource = """
@@ -41,7 +45,11 @@ fragment float4 mcmetal_fragment_main() {
 private struct NativeBufferRecord {
     var usage: Int32
     var size: Int
-    var bytes: Data
+    var slotSize: Int
+    var slotCount: Int
+    var nextSlot: Int
+    var lastWriteOffset: Int
+    let metalBuffer: MTLBuffer
 }
 
 private final class MetalContextState {
@@ -121,6 +129,15 @@ private func clampScale(_ value: Float) -> CGFloat {
 
 private func clampColor(_ value: Float) -> Double {
     return min(max(Double(value), 0.0), 1.0)
+}
+
+private func alignUp(_ value: Int, alignment: Int) -> Int {
+    let validAlignment = max(alignment, 1)
+    let remainder = value % validAlignment
+    if remainder == 0 {
+        return value
+    }
+    return value + (validAlignment - remainder)
 }
 
 private func applyValidationEnvironment(debugFlags: Int32) {
@@ -919,28 +936,57 @@ public func mcmetal_swift_draw_indexed(
     return drawStatus
 }
 
-private func makeBufferData(
+private func createNativeBufferRecord(
+    context: MetalContextState,
+    usage: Int32,
     size: Int32,
     initialData: UnsafeRawPointer?,
     initialDataLength: Int32
-) -> Data? {
+) -> NativeBufferRecord? {
     if size <= 0 || initialDataLength < 0 || initialDataLength > size {
         return nil
     }
     if initialDataLength > 0 && initialData == nil {
         return nil
     }
+    if usage != kBufferUsageStatic && usage != kBufferUsageDynamic {
+        return nil
+    }
 
-    var bytes = Data(count: Int(size))
+    let logicalSize = Int(size)
+    let dynamicUsage = usage == kBufferUsageDynamic
+    let slotCount = dynamicUsage ? kDynamicBufferSlotCount : 1
+    let slotSize = dynamicUsage
+        ? alignUp(logicalSize, alignment: kDynamicBufferAlignment)
+        : logicalSize
+    let allocationLength = slotSize * slotCount
+
+    guard let metalBuffer = context.device.makeBuffer(length: allocationLength, options: .storageModeShared) else {
+        return nil
+    }
+    if (context.debugFlags & kDebugFlagLabels) != 0 {
+        metalBuffer.label = dynamicUsage ? "MCMetal Dynamic Buffer" : "MCMetal Static Buffer"
+    }
+
     if let initialData, initialDataLength > 0 {
-        bytes.withUnsafeMutableBytes { rawBuffer in
-            guard let destination = rawBuffer.baseAddress else {
-                return
-            }
+        for slot in 0..<slotCount {
+            let destination = metalBuffer.contents().advanced(by: slot * slotSize)
             destination.copyMemory(from: initialData, byteCount: Int(initialDataLength))
+            if !dynamicUsage {
+                break
+            }
         }
     }
-    return bytes
+
+    return NativeBufferRecord(
+        usage: usage,
+        size: logicalSize,
+        slotSize: slotSize,
+        slotCount: slotCount,
+        nextSlot: dynamicUsage ? 1 % slotCount : 0,
+        lastWriteOffset: 0,
+        metalBuffer: metalBuffer
+    )
 }
 
 @_cdecl("mcmetal_swift_create_buffer")
@@ -950,13 +996,15 @@ public func mcmetal_swift_create_buffer(
     _ initialData: UnsafeRawPointer?,
     _ initialDataLength: Int32
 ) -> Int64 {
-    if size <= 0 {
+    if size <= 0 || (usage != kBufferUsageStatic && usage != kBufferUsageDynamic) {
         assertionFailure("Buffer size must be positive.")
         return 0
     }
 
     return withContextStateValue(0) { context in
-        guard let bytes = makeBufferData(
+        guard let record = createNativeBufferRecord(
+            context: context,
+            usage: usage,
             size: size,
             initialData: initialData,
             initialDataLength: initialDataLength
@@ -966,11 +1014,7 @@ public func mcmetal_swift_create_buffer(
 
         let handle = context.nextBufferHandle
         context.nextBufferHandle = handle &+ 1
-        context.nativeBuffers[handle] = NativeBufferRecord(
-            usage: usage,
-            size: Int(size),
-            bytes: bytes
-        )
+        context.nativeBuffers[handle] = record
         return handle
     }
 }
@@ -1003,14 +1047,25 @@ public func mcmetal_swift_update_buffer(
             return kStatusInvalidArgument
         }
 
-        if let data, updateLength > 0 {
-            record.bytes.withUnsafeMutableBytes { rawBuffer in
-                guard let destinationBase = rawBuffer.baseAddress?.advanced(by: updateOffset) else {
-                    return
-                }
-                destinationBase.copyMemory(from: data, byteCount: updateLength)
-            }
+        let slotBaseOffset: Int
+        if record.usage == kBufferUsageDynamic {
+            let slot = record.nextSlot
+            slotBaseOffset = slot * record.slotSize
+            record.nextSlot = (slot + 1) % max(record.slotCount, 1)
+        } else {
+            slotBaseOffset = 0
         }
+        let destinationOffset = slotBaseOffset + updateOffset
+        if destinationOffset + updateLength > record.metalBuffer.length {
+            assertionFailure("Buffer update writes beyond allocated Metal buffer.")
+            return kStatusInvalidArgument
+        }
+
+        if let data, updateLength > 0 {
+            let destination = record.metalBuffer.contents().advanced(by: destinationOffset)
+            destination.copyMemory(from: data, byteCount: updateLength)
+        }
+        record.lastWriteOffset = slotBaseOffset
 
         context.nativeBuffers[handle] = record
         return kStatusOk
