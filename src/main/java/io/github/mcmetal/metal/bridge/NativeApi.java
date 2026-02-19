@@ -61,5 +61,19 @@ public final class NativeApi {
         int packedByteLength
     );
 
+    public static native long nativeCreateShaderProgram(
+        String programName,
+        String vertexMslSource,
+        String fragmentMslSource
+    );
+
+    public static native int nativeCompileShaderPipeline(long programHandle, long vertexDescriptorHandle);
+
+    public static native long nativeRegisterUniform(long programHandle, String uniformName, int set, int binding);
+
+    public static native int nativeUpdateUniformFloat4(long uniformHandle, float x, float y, float z, float w);
+
+    public static native int nativeDestroyShaderProgram(long programHandle);
+
     public static native void nativeShutdown();
 }

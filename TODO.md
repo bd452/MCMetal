@@ -48,16 +48,16 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Add deferred destruction/resource lifetime handling tied to frame completion.
   - [x] Stress test buffer churn and high draw-count scenes.
 
-- [ ] 5. Phase 4 - Shader Pipeline (GLSL -> SPIR-V -> MSL)
-  - [ ] Intercept `ShaderInstance` load/compile lifecycle from Java.
-  - [ ] Integrate GLSL-to-SPIR-V compilation path.
-  - [ ] Integrate SPIR-V-to-MSL translation path.
-  - [ ] Implement reflection-based binding map generation (uniforms, textures, samplers).
-  - [ ] Build Swift-native shader program creation and pipeline compilation path.
-  - [ ] Implement uniform update bridge with stable IDs (avoid per-frame string lookups).
-  - [ ] Add disk cache for translated shaders and reflection metadata.
-  - [ ] Add shader diagnostics (GLSL input, compile errors, translated MSL output in debug mode).
-  - [ ] Validate representative vanilla shader corpus.
+- [x] 5. Phase 4 - Shader Pipeline (GLSL -> SPIR-V -> MSL)
+  - [x] Intercept `ShaderInstance` load/compile lifecycle from Java.
+  - [x] Integrate GLSL-to-SPIR-V compilation path.
+  - [x] Integrate SPIR-V-to-MSL translation path.
+  - [x] Implement reflection-based binding map generation (uniforms, textures, samplers).
+  - [x] Build Swift-native shader program creation and pipeline compilation path.
+  - [x] Implement uniform update bridge with stable IDs (avoid per-frame string lookups).
+  - [x] Add disk cache for translated shaders and reflection metadata.
+  - [x] Add shader diagnostics (GLSL input, compile errors, translated MSL output in debug mode).
+  - [x] Validate representative vanilla shader corpus.
 
 - [ ] 6. Phase 5 - Textures and Render Targets
   - [ ] Map Minecraft texture formats and usage flags to Metal pixel formats.
