@@ -336,14 +336,17 @@ private func createPipelineState(context: MetalContextState, key: PipelineKey) -
     let descriptor = MTLRenderPipelineDescriptor()
     descriptor.vertexFunction = context.vertexFunction
     descriptor.fragmentFunction = context.fragmentFunction
-    descriptor.sampleCount = Int(max(key.sampleCount, 1))
+    descriptor.rasterSampleCount = Int(max(key.sampleCount, 1))
 
     guard let colorAttachment = descriptor.colorAttachments[0] else {
         return nil
     }
 
-    let pixelFormatRawValue = UInt(max(key.colorPixelFormat, 0))
-    colorAttachment.pixelFormat = MTLPixelFormat(rawValue: pixelFormatRawValue)
+    let pixelFormatRawValue = UInt32(bitPattern: key.colorPixelFormat)
+    guard let colorPixelFormat = MTLPixelFormat(rawValue: UInt(pixelFormatRawValue)) else {
+        return nil
+    }
+    colorAttachment.pixelFormat = colorPixelFormat
 
     if key.blendEnabled {
         colorAttachment.isBlendingEnabled = true
