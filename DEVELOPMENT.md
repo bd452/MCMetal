@@ -15,6 +15,7 @@ This document covers local prerequisites and build workflows for the Phase 0 fou
 - macOS 13+ (Ventura/Sonoma/Sequoia supported by project policy)
 - Xcode and Xcode Command Line Tools
 - CMake 3.27+
+- Swift toolchain (provided by Xcode)
 
 Verify key tools:
 
@@ -22,6 +23,7 @@ Verify key tools:
 java -version
 cmake --version
 xcodebuild -version
+xcrun swift --version
 ```
 
 ## 1.3 Linux/Windows notes
@@ -52,7 +54,7 @@ This command runs Java compilation, unit tests, and (on macOS) native configure/
 Native sources are in `native/`:
 
 - `native/include/` - JNI/API headers and version constants
-- `native/src/` - C++/Objective-C++ JNI entrypoints and Metal stubs
+- `native/src/` - C JNI entrypoints and Swift Metal runtime sources
 - `native/scripts/build_macos.sh` - helper script for direct CMake/Xcode builds
 
 The produced macOS artifact is:

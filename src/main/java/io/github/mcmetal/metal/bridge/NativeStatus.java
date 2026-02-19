@@ -8,4 +8,18 @@ public final class NativeStatus {
 
     private NativeStatus() {
     }
+
+    public static boolean isSuccess(int statusCode) {
+        return statusCode == OK || statusCode == ALREADY_INITIALIZED;
+    }
+
+    public static String describe(int statusCode) {
+        return switch (statusCode) {
+            case OK -> "OK";
+            case ALREADY_INITIALIZED -> "ALREADY_INITIALIZED";
+            case INVALID_ARGUMENT -> "INVALID_ARGUMENT";
+            case INITIALIZATION_FAILED -> "INITIALIZATION_FAILED";
+            default -> "UNKNOWN";
+        };
+    }
 }

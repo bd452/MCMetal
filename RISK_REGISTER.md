@@ -20,7 +20,7 @@ Review cadence: Bi-weekly (or immediately when severity changes)
 | R-004 | Resource lifetime bugs cause leaks, use-after-free, or GPU stalls. | Medium | High | High | Enforce deferred destruction queues, frame completion fences, and lifetime-focused tests. | Native Lead | Memory growth over long sessions, GPU timeout/stall telemetry. | Open |
 | R-005 | Rendering-overhaul mod conflicts create undefined behavior or crashes. | High | Medium | High | Detect incompatible mods at startup and safe-disable with actionable messaging. | Compatibility Lead | Crash reports with known conflicting mods loaded. | Open |
 | R-006 | Intel macOS support diverges from Apple Silicon behavior/performance. | Medium | Medium | Medium | Track architecture-specific regressions and require Intel matrix validation before stable release. | QA Lead | Intel-only rendering artifacts or unacceptable frame pacing. | Open |
-| R-007 | Build and packaging process for native artifacts becomes non-reproducible. | Medium | High | High | Pin toolchains, document prerequisites, and enforce reproducibility checks in CI. | Build/CI Lead | Non-deterministic binary outputs, release artifact mismatch. | Open |
+| R-007 | Build and packaging process for native artifacts becomes non-reproducible. | Medium | High | High | Pin toolchains (including Swift/Xcode), document prerequisites, and enforce reproducibility checks in CI. | Build/CI Lead | Non-deterministic binary outputs, release artifact mismatch. | Open |
 
 ## Ownership and maintenance rules
 

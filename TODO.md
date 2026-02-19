@@ -1,5 +1,7 @@
 # MCMetal Project Plan
 
+Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
+
 - [x] 0. Project Governance, Scope, and Readiness
   - [x] Confirm supported target matrix (Minecraft version, Fabric loader/API version, macOS versions, Apple Silicon + Intel coverage).
   - [x] Finalize and publish scope boundaries (Metal backend substitution only, no non-rendering subsystem rewrite).
@@ -11,26 +13,26 @@
 - [x] 1. Phase 0 - Foundation and Build Integration
   - [x] Create/validate Fabric mod skeleton and package structure.
   - [x] Add Java Metal bridge package with JNI method declarations.
-  - [x] Create native module layout (`native/`, headers, source folders, build scripts).
-  - [x] Implement native library bootstrap (`libminecraft_metal.dylib`) build with CMake/Xcode tooling.
+  - [x] Create native module layout (`native/`, headers, Swift source folders, build scripts).
+  - [x] Implement native library bootstrap (`libminecraft_metal.dylib`) build with CMake/Xcode + Swift tooling.
   - [x] Integrate native build into Gradle lifecycle (build, test, package, publish artifacts).
   - [x] Implement startup native loading and version handshake validation.
   - [x] Add structured startup logging for native initialization success/failure.
   - [x] Add initial CI pipeline to build Java and native artifacts on macOS runners.
   - [x] Document local development setup and build prerequisites.
 
-- [ ] 2. Phase 1 - Window and Surface Bring-Up
-  - [ ] Add window interception and retrieve Cocoa window handle from GLFW.
-  - [ ] Attach/configure `CAMetalLayer` on Minecraft window content view.
-  - [ ] Initialize `MTLDevice` and `MTLCommandQueue`.
-  - [ ] Implement frame clear + present demo path through Metal.
-  - [ ] Wire drawable resize handling (window resize, retina scale changes, fullscreen transitions).
-  - [ ] Ensure no runtime dependency on active OpenGL rendering context.
-  - [ ] Add debug labels and validation toggles for early bring-up diagnostics.
+- [x] 2. Phase 1 - Window and Surface Bring-Up
+  - [x] Add window interception and retrieve Cocoa window handle from GLFW.
+  - [x] Attach/configure `CAMetalLayer` on Minecraft window content view.
+  - [x] Initialize `MTLDevice` and `MTLCommandQueue`.
+  - [x] Implement frame clear + present demo path through Metal.
+  - [x] Wire drawable resize handling (window resize, retina scale changes, fullscreen transitions).
+  - [x] Ensure no runtime dependency on active OpenGL rendering context.
+  - [x] Add debug labels and validation toggles for early bring-up diagnostics.
 
 - [ ] 3. Phase 2 - RenderSystem State Translation
   - [ ] Implement Java mixins for core `RenderSystem` state calls.
-  - [ ] Build normalized native state tracker (blend, depth, stencil, cull, scissor, viewport).
+  - [ ] Build normalized Swift-native state tracker (blend, depth, stencil, cull, scissor, viewport).
   - [ ] Implement deterministic state-to-key conversion for pipeline/depth-stencil lookup.
   - [ ] Add command encoder setup based on tracked state snapshots.
   - [ ] Implement basic draw submission for simple world/UI primitives.
@@ -51,7 +53,7 @@
   - [ ] Integrate GLSL-to-SPIR-V compilation path.
   - [ ] Integrate SPIR-V-to-MSL translation path.
   - [ ] Implement reflection-based binding map generation (uniforms, textures, samplers).
-  - [ ] Build native shader program creation and pipeline compilation path.
+  - [ ] Build Swift-native shader program creation and pipeline compilation path.
   - [ ] Implement uniform update bridge with stable IDs (avoid per-frame string lookups).
   - [ ] Add disk cache for translated shaders and reflection metadata.
   - [ ] Add shader diagnostics (GLSL input, compile errors, translated MSL output in debug mode).
@@ -95,7 +97,7 @@
   - [ ] Track compatibility test runs by Minecraft/Fabric/macOS combination.
 
 - [ ] 10. Cross-Cutting Workstream - Quality Engineering and Test Automation
-  - [ ] Implement native unit tests for pipeline key hashing/equality.
+  - [ ] Implement Swift native unit tests for pipeline key hashing/equality.
   - [ ] Implement unit tests for format mapping and resource binding metadata.
   - [ ] Implement tests for deferred destruction/resource lifetime queue behavior.
   - [ ] Add shader pipeline smoke tests (compile + translation + function creation).

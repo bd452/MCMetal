@@ -13,5 +13,9 @@ public final class NativeApi {
 
     public static native int nativeInitialize(long cocoaWindowHandle, int width, int height, int debugFlags);
 
+    public static native int nativeResize(int width, int height, float scaleFactor, boolean fullscreen);
+
+    public static native int nativeRenderDemoFrame(float red, float green, float blue, float alpha);
+
     public static native void nativeShutdown();
 }

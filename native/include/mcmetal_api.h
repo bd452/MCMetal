@@ -19,6 +19,22 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeIniti
     jint height,
     jint debug_flags);
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeResize(
+    JNIEnv *env,
+    jclass clazz,
+    jint width,
+    jint height,
+    jfloat scale_factor,
+    jboolean fullscreen);
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRenderDemoFrame(
+    JNIEnv *env,
+    jclass clazz,
+    jfloat red,
+    jfloat green,
+    jfloat blue,
+    jfloat alpha);
+
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
     jclass clazz);
