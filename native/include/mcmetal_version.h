@@ -1,0 +1,6 @@
+#ifndef MCMETAL_VERSION_H
+#define MCMETAL_VERSION_H
+
+#define MCMETAL_BRIDGE_VERSION "0.1.0"
+
+#endif  // MCMETAL_VERSION_H

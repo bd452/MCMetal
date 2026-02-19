@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "mcmetal",
+  "version": "${version}",
+  "name": "MCMetal",
+  "description": "Fabric mod that integrates a Metal renderer backend for Minecraft on macOS.",
+  "authors": [
+    "MCMetal Contributors"
+  ],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "io.github.mcmetal.MCMetalMod"
+    ]
+  },
+  "mixins": [
+    "mcmetal.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loaderVersion}",
+    "minecraft": "1.21.1",
+    "fabric-api": "*"
+  }
+}
