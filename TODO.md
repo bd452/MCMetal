@@ -39,14 +39,14 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Validate state transition correctness with debug assertions and logs.
   - [x] Add regression checks for frequent state-change scenarios.
 
-- [ ] 4. Phase 3 - Buffers, Vertex Formats, and Draw Path
+- [x] 4. Phase 3 - Buffers, Vertex Formats, and Draw Path
   - [x] Intercept and map `BufferBuilder`/`VertexBuffer` data flows to native buffer APIs.
   - [x] Implement static and dynamic `MTLBuffer` allocation strategy.
   - [x] Add ring-buffer/staging strategy for per-frame uploads.
   - [x] Implement vertex descriptor mapping from Blaze3D formats to Metal descriptors.
   - [x] Support indexed and non-indexed draw variants with correct index-type handling.
   - [x] Add deferred destruction/resource lifetime handling tied to frame completion.
-  - [ ] Stress test buffer churn and high draw-count scenes.
+  - [x] Stress test buffer churn and high draw-count scenes.
 
 - [ ] 5. Phase 4 - Shader Pipeline (GLSL -> SPIR-V -> MSL)
   - [ ] Intercept `ShaderInstance` load/compile lifecycle from Java.

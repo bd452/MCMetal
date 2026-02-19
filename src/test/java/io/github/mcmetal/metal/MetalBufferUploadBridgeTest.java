@@ -13,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MetalBufferUploadBridgeTest {
     private final RecordingNativeBackend backend = new RecordingNativeBackend();
@@ -213,6 +214,57 @@ class MetalBufferUploadBridgeTest {
             RuntimeException.class,
             () -> MetalBufferUploadBridge.onVertexBufferDrawForTests(vertexBuffer)
         );
+    }
+
+    @Test
+    void stressTestBufferChurnAndHighDrawCount() {
+        List<Object> vertexBuffers = new ArrayList<>();
+        for (int i = 0; i < 48; i++) {
+            vertexBuffers.add(new Object());
+        }
+
+        int totalDraws = 0;
+        for (int frame = 0; frame < 220; frame++) {
+            for (int i = 0; i < vertexBuffers.size(); i++) {
+                Object vertexBuffer = vertexBuffers.get(i);
+                boolean indexed = ((frame + i) % 3) == 0;
+                int vertexBytes = 32 + ((frame + i) % 12) * 24;
+                int indexBytes = indexed ? 24 + ((frame + i) % 4) * 8 : 0;
+                VertexFormat.DrawMode drawMode = indexed ? VertexFormat.DrawMode.QUADS : VertexFormat.DrawMode.TRIANGLES;
+                int vertexCount = indexed ? 4 : 3;
+                int indexCount = indexed ? 6 : 3;
+
+                MetalBufferUploadBridge.UploadSnapshot snapshot = snapshot(
+                    vertexBytes,
+                    indexBytes,
+                    drawMode,
+                    vertexCount,
+                    indexCount,
+                    VertexFormat.IndexType.SHORT
+                );
+                MetalBufferUploadBridge.onVertexBufferUploadForTests(
+                    vertexBuffer,
+                    MetalBufferUploadBridge.BufferUsage.DYNAMIC,
+                    new Object(),
+                    snapshot
+                );
+                MetalBufferUploadBridge.onVertexBufferDrawForTests(vertexBuffer);
+                totalDraws++;
+            }
+            MetalBufferUploadBridge.onFrameSubmittedForTests();
+        }
+
+        for (Object vertexBuffer : vertexBuffers) {
+            MetalBufferUploadBridge.onVertexBufferCloseForTests(vertexBuffer);
+        }
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
+        MetalBufferUploadBridge.onFrameSubmittedForTests();
+
+        assertTrue(backend.createCalls > 0);
+        assertTrue(backend.updateCalls > 0);
+        assertTrue(backend.drawCalls + backend.drawIndexedCalls >= totalDraws);
+        assertTrue(backend.destroyCalls > 0);
     }
 
     private static MetalBufferUploadBridge.UploadSnapshot snapshot(int vertexBytes, int indexBytes) {
