@@ -13,6 +13,7 @@ find_package(JNI REQUIRED)
 
 add_library(minecraft_metal SHARED
     src/jni_entrypoints.c
+    src/RenderStateTracker.swift
     src/MetalContext.swift
 )
 

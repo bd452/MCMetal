@@ -75,6 +75,10 @@ public final class MetalPhaseOneBridge {
         shutdown();
     }
 
+    public static boolean isInitialized() {
+        return initialized;
+    }
+
     private static void initialize(Window window) {
         if (initialized) {
             return;
