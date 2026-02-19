@@ -15,6 +15,7 @@ private let kBufferUsageStatic: Int32 = 0
 private let kBufferUsageDynamic: Int32 = 1
 private let kDynamicBufferSlotCount: Int = 3
 private let kDynamicBufferAlignment: Int = 256
+private let kUploadStagingInitialSize: Int = 4 * 1024 * 1024
 private let kDemoVertexFunctionName = "mcmetal_vertex_main"
 private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
 private let kDemoShaderSource = """
@@ -47,7 +48,6 @@ private struct NativeBufferRecord {
     var size: Int
     var slotSize: Int
     var slotCount: Int
-    var nextSlot: Int
     var lastWriteOffset: Int
     let metalBuffer: MTLBuffer
 }
@@ -72,6 +72,11 @@ private final class MetalContextState {
     var depthStencilCache: [DepthStencilKey: MTLDepthStencilState] = [:]
     var nextBufferHandle: Int64 = 1
     var nativeBuffers: [Int64: NativeBufferRecord] = [:]
+    var frameSerial: UInt64 = 0
+    var uploadStagingBuffer: MTLBuffer?
+    var uploadStagingCapacity: Int = 0
+    var uploadStagingWriteOffset: Int = 0
+    var uploadStagingFrame: UInt64 = 0
 
     init(
         window: NSWindow,
@@ -188,6 +193,70 @@ private func withContextStateValue<T>(
         return fallback
     }
     return body(context)
+}
+
+private func ensureUploadStagingBuffer(
+    context: MetalContextState,
+    minimumCapacity: Int
+) -> MTLBuffer? {
+    let requestedCapacity = max(minimumCapacity, kUploadStagingInitialSize)
+    let alignedCapacity = alignUp(requestedCapacity, alignment: kDynamicBufferAlignment)
+    if let existing = context.uploadStagingBuffer, context.uploadStagingCapacity >= alignedCapacity {
+        return existing
+    }
+
+    guard let stagingBuffer = context.device.makeBuffer(length: alignedCapacity, options: .storageModeShared) else {
+        return nil
+    }
+    if (context.debugFlags & kDebugFlagLabels) != 0 {
+        stagingBuffer.label = "MCMetal Upload Staging Ring"
+    }
+
+    context.uploadStagingBuffer = stagingBuffer
+    context.uploadStagingCapacity = alignedCapacity
+    context.uploadStagingWriteOffset = 0
+    context.uploadStagingFrame = context.frameSerial
+    return stagingBuffer
+}
+
+private func reserveUploadStagingRange(
+    context: MetalContextState,
+    byteCount: Int
+) -> (buffer: MTLBuffer, offset: Int)? {
+    if byteCount <= 0 {
+        return nil
+    }
+
+    let alignedLength = alignUp(byteCount, alignment: kDynamicBufferAlignment)
+    if context.uploadStagingFrame != context.frameSerial {
+        context.uploadStagingFrame = context.frameSerial
+        context.uploadStagingWriteOffset = 0
+    }
+
+    guard let stagingBuffer = ensureUploadStagingBuffer(
+        context: context,
+        minimumCapacity: alignedLength
+    ) else {
+        return nil
+    }
+
+    if context.uploadStagingWriteOffset + alignedLength > context.uploadStagingCapacity {
+        context.uploadStagingWriteOffset = 0
+        context.uploadStagingFrame = context.frameSerial
+    }
+
+    let rangeOffset = context.uploadStagingWriteOffset
+    context.uploadStagingWriteOffset += alignedLength
+    return (stagingBuffer, rangeOffset)
+}
+
+private func markFrameSubmitted() {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    guard let context = contextState else {
+        return
+    }
+    context.frameSerial &+= 1
 }
 
 private func shouldLogStateTransitions(_ context: MetalContextState) -> Bool {
@@ -690,6 +759,7 @@ public func mcmetal_swift_render_demo_frame(
         encoder.endEncoding()
         commandBuffer.present(drawable)
         commandBuffer.commit()
+        markFrameSubmitted()
         return kStatusOk
     }
 
@@ -930,6 +1000,7 @@ public func mcmetal_swift_draw_indexed(
         encoder.endEncoding()
         commandBuffer.present(drawable)
         commandBuffer.commit()
+        markFrameSubmitted()
         return kStatusOk
     }
 
@@ -983,7 +1054,6 @@ private func createNativeBufferRecord(
         size: logicalSize,
         slotSize: slotSize,
         slotCount: slotCount,
-        nextSlot: dynamicUsage ? 1 % slotCount : 0,
         lastWriteOffset: 0,
         metalBuffer: metalBuffer
     )
@@ -1049,9 +1119,8 @@ public func mcmetal_swift_update_buffer(
 
         let slotBaseOffset: Int
         if record.usage == kBufferUsageDynamic {
-            let slot = record.nextSlot
+            let slot = Int(context.frameSerial % UInt64(max(record.slotCount, 1)))
             slotBaseOffset = slot * record.slotSize
-            record.nextSlot = (slot + 1) % max(record.slotCount, 1)
         } else {
             slotBaseOffset = 0
         }
@@ -1062,8 +1131,13 @@ public func mcmetal_swift_update_buffer(
         }
 
         if let data, updateLength > 0 {
+            guard let stagingRange = reserveUploadStagingRange(context: context, byteCount: updateLength) else {
+                return kStatusInitializationFailed
+            }
+            let stagingPointer = stagingRange.buffer.contents().advanced(by: stagingRange.offset)
+            stagingPointer.copyMemory(from: data, byteCount: updateLength)
             let destination = record.metalBuffer.contents().advanced(by: destinationOffset)
-            destination.copyMemory(from: data, byteCount: updateLength)
+            destination.copyMemory(from: stagingPointer, byteCount: updateLength)
         }
         record.lastWriteOffset = slotBaseOffset
 

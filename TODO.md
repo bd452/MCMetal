@@ -42,7 +42,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
 - [ ] 4. Phase 3 - Buffers, Vertex Formats, and Draw Path
   - [x] Intercept and map `BufferBuilder`/`VertexBuffer` data flows to native buffer APIs.
   - [x] Implement static and dynamic `MTLBuffer` allocation strategy.
-  - [ ] Add ring-buffer/staging strategy for per-frame uploads.
+  - [x] Add ring-buffer/staging strategy for per-frame uploads.
   - [ ] Implement vertex descriptor mapping from Blaze3D formats to Metal descriptors.
   - [ ] Support indexed and non-indexed draw variants with correct index-type handling.
   - [ ] Add deferred destruction/resource lifetime handling tied to frame completion.
