@@ -4,7 +4,8 @@
 
 JNIEXPORT jstring JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeGetBridgeVersion(
     JNIEnv *env,
-    jclass clazz) {
+    jclass clazz)
+{
   (void)clazz;
   return (*env)->NewStringUTF(env, MCMETAL_BRIDGE_VERSION);
 }
@@ -15,7 +16,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeIniti
     jlong cocoa_window_handle,
     jint width,
     jint height,
-    jint debug_flags) {
+    jint debug_flags)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_initialize(
@@ -31,7 +33,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeResiz
     jint width,
     jint height,
     jfloat scale_factor,
-    jboolean fullscreen) {
+    jboolean fullscreen)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_resize(
@@ -47,7 +50,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRende
     jfloat red,
     jfloat green,
     jfloat blue,
-    jfloat alpha) {
+    jfloat alpha)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_render_demo_frame(
@@ -60,7 +64,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRende
 JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetBlendEnabled(
     JNIEnv *env,
     jclass clazz,
-    jboolean enabled) {
+    jboolean enabled)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_blend_enabled(enabled == JNI_TRUE ? 1 : 0);
@@ -72,7 +77,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetBl
     jint src_rgb,
     jint dst_rgb,
     jint src_alpha,
-    jint dst_alpha) {
+    jint dst_alpha)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_blend_func(
@@ -86,7 +92,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetBl
     JNIEnv *env,
     jclass clazz,
     jint rgb_equation,
-    jint alpha_equation) {
+    jint alpha_equation)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_blend_equation(
@@ -99,7 +106,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetDe
     jclass clazz,
     jboolean depth_test_enabled,
     jboolean depth_write_enabled,
-    jint depth_compare_function) {
+    jint depth_compare_function)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_depth_state(
@@ -118,7 +126,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetSt
     jint stencil_write_mask,
     jint stencil_sfail,
     jint stencil_dpfail,
-    jint stencil_dppass) {
+    jint stencil_dppass)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_stencil_state(
@@ -136,7 +145,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetCu
     JNIEnv *env,
     jclass clazz,
     jboolean cull_enabled,
-    jint cull_mode) {
+    jint cull_mode)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_cull_state(
@@ -151,7 +161,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetSc
     jint x,
     jint y,
     jint width,
-    jint height) {
+    jint height)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_scissor_state(
@@ -170,7 +181,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetVi
     jint width,
     jint height,
     jfloat min_depth,
-    jfloat max_depth) {
+    jfloat max_depth)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_set_viewport_state(
@@ -187,7 +199,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDraw(
     jclass clazz,
     jint mode,
     jint first,
-    jint count) {
+    jint count)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_draw(
@@ -201,7 +214,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDrawI
     jclass clazz,
     jint mode,
     jint count,
-    jint index_type) {
+    jint index_type)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_draw_indexed(
@@ -216,12 +230,15 @@ JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCrea
     jint usage,
     jint size,
     jobject initial_data,
-    jint initial_data_length) {
+    jint initial_data_length)
+{
   (void)clazz;
   const void *initial_data_ptr = NULL;
-  if (initial_data != NULL) {
+  if (initial_data != NULL)
+  {
     initial_data_ptr = (*env)->GetDirectBufferAddress(env, initial_data);
-    if (initial_data_ptr == NULL && initial_data_length > 0) {
+    if (initial_data_ptr == NULL && initial_data_length > 0)
+    {
       return (jlong)0;
     }
   }
@@ -238,12 +255,15 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdat
     jlong handle,
     jint offset,
     jobject data,
-    jint data_length) {
+    jint data_length)
+{
   (void)clazz;
   const void *data_ptr = NULL;
-  if (data != NULL) {
+  if (data != NULL)
+  {
     data_ptr = (*env)->GetDirectBufferAddress(env, data);
-    if (data_ptr == NULL && data_length > 0) {
+    if (data_ptr == NULL && data_length > 0)
+    {
       return (jint)2;
     }
   }
@@ -257,7 +277,8 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdat
 JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyBuffer(
     JNIEnv *env,
     jclass clazz,
-    jlong handle) {
+    jlong handle)
+{
   (void)env;
   (void)clazz;
   return (jint)mcmetal_swift_destroy_buffer((int64_t)handle);
@@ -269,19 +290,23 @@ JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegi
     jint stride_bytes,
     jint attribute_count,
     jobject packed_elements,
-    jint packed_byte_length) {
+    jint packed_byte_length)
+{
   (void)clazz;
-  if (stride_bytes <= 0 || attribute_count <= 0 || packed_elements == NULL || packed_byte_length <= 0) {
+  if (stride_bytes <= 0 || attribute_count <= 0 || packed_elements == NULL || packed_byte_length <= 0)
+  {
     return (jlong)0;
   }
 
   const int32_t *packed_ptr = (const int32_t *)(*env)->GetDirectBufferAddress(env, packed_elements);
-  if (packed_ptr == NULL) {
+  if (packed_ptr == NULL)
+  {
     return (jlong)0;
   }
 
   int32_t packed_int_count = (int32_t)(packed_byte_length / (jint)sizeof(int32_t));
-  if (packed_int_count <= 0) {
+  if (packed_int_count <= 0)
+  {
     return (jlong)0;
   }
 
@@ -292,9 +317,126 @@ JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegi
       packed_int_count);
 }
 
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCreateShaderProgram(
+    JNIEnv *env,
+    jclass clazz,
+    jstring program_name,
+    jstring vertex_msl_source,
+    jstring fragment_msl_source)
+{
+  (void)clazz;
+  if (program_name == NULL || vertex_msl_source == NULL || fragment_msl_source == NULL)
+  {
+    return (jlong)0;
+  }
+
+  const char *program_name_utf = (*env)->GetStringUTFChars(env, program_name, NULL);
+  const char *vertex_msl_utf = (*env)->GetStringUTFChars(env, vertex_msl_source, NULL);
+  const char *fragment_msl_utf = (*env)->GetStringUTFChars(env, fragment_msl_source, NULL);
+
+  if (program_name_utf == NULL || vertex_msl_utf == NULL || fragment_msl_utf == NULL)
+  {
+    if (program_name_utf != NULL)
+    {
+      (*env)->ReleaseStringUTFChars(env, program_name, program_name_utf);
+    }
+    if (vertex_msl_utf != NULL)
+    {
+      (*env)->ReleaseStringUTFChars(env, vertex_msl_source, vertex_msl_utf);
+    }
+    if (fragment_msl_utf != NULL)
+    {
+      (*env)->ReleaseStringUTFChars(env, fragment_msl_source, fragment_msl_utf);
+    }
+    return (jlong)0;
+  }
+
+  int64_t handle = mcmetal_swift_create_shader_program(
+      program_name_utf,
+      vertex_msl_utf,
+      fragment_msl_utf);
+
+  (*env)->ReleaseStringUTFChars(env, program_name, program_name_utf);
+  (*env)->ReleaseStringUTFChars(env, vertex_msl_source, vertex_msl_utf);
+  (*env)->ReleaseStringUTFChars(env, fragment_msl_source, fragment_msl_utf);
+  return (jlong)handle;
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCompileShaderPipeline(
+    JNIEnv *env,
+    jclass clazz,
+    jlong program_handle,
+    jlong vertex_descriptor_handle)
+{
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_compile_shader_pipeline(
+      (int64_t)program_handle,
+      (int64_t)vertex_descriptor_handle);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterUniform(
+    JNIEnv *env,
+    jclass clazz,
+    jlong program_handle,
+    jstring uniform_name,
+    jint set,
+    jint binding)
+{
+  (void)clazz;
+  if (uniform_name == NULL)
+  {
+    return (jlong)0;
+  }
+
+  const char *uniform_name_utf = (*env)->GetStringUTFChars(env, uniform_name, NULL);
+  if (uniform_name_utf == NULL)
+  {
+    return (jlong)0;
+  }
+
+  int64_t handle = mcmetal_swift_register_uniform(
+      (int64_t)program_handle,
+      uniform_name_utf,
+      (int32_t)set,
+      (int32_t)binding);
+  (*env)->ReleaseStringUTFChars(env, uniform_name, uniform_name_utf);
+  return (jlong)handle;
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdateUniformFloat4(
+    JNIEnv *env,
+    jclass clazz,
+    jlong uniform_handle,
+    jfloat x,
+    jfloat y,
+    jfloat z,
+    jfloat w)
+{
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_update_uniform_float4(
+      (int64_t)uniform_handle,
+      (float)x,
+      (float)y,
+      (float)z,
+      (float)w);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyShaderProgram(
+    JNIEnv *env,
+    jclass clazz,
+    jlong program_handle)
+{
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_destroy_shader_program((int64_t)program_handle);
+}
+
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
-    jclass clazz) {
+    jclass clazz)
+{
   (void)env;
   (void)clazz;
   mcmetal_swift_shutdown();

@@ -1,8 +1,8 @@
 import AppKit
+import Darwin
 import Foundation
 import Metal
 import QuartzCore
-import Darwin
 
 private let kStatusOk: Int32 = 0
 private let kStatusAlreadyInitialized: Int32 = 1
@@ -25,29 +25,29 @@ private let kVertexUsageGeneric: Int32 = 4
 private let kDemoVertexFunctionName = "mcmetal_vertex_main"
 private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
 private let kDemoShaderSource = """
-#include <metal_stdlib>
-using namespace metal;
+    #include <metal_stdlib>
+    using namespace metal;
 
-struct VertexOut {
-    float4 position [[position]];
-};
-
-vertex VertexOut mcmetal_vertex_main(uint vertexId [[vertex_id]]) {
-    const float2 positions[3] = {
-        float2(-0.75, -0.75),
-        float2(0.0, 0.75),
-        float2(0.75, -0.75)
+    struct VertexOut {
+        float4 position [[position]];
     };
 
-    VertexOut out;
-    out.position = float4(positions[vertexId % 3], 0.0, 1.0);
-    return out;
-}
+    vertex VertexOut mcmetal_vertex_main(uint vertexId [[vertex_id]]) {
+        const float2 positions[3] = {
+            float2(-0.75, -0.75),
+            float2(0.0, 0.75),
+            float2(0.75, -0.75)
+        };
 
-fragment float4 mcmetal_fragment_main() {
-    return float4(0.9, 0.9, 0.95, 1.0);
-}
-"""
+        VertexOut out;
+        out.position = float4(positions[vertexId % 3], 0.0, 1.0);
+        return out;
+    }
+
+    fragment float4 mcmetal_fragment_main() {
+        return float4(0.9, 0.9, 0.95, 1.0);
+    }
+    """
 
 private struct NativeBufferRecord {
     var usage: Int32
@@ -74,6 +74,23 @@ private struct NativeVertexDescriptorRecord {
     var descriptor: MTLVertexDescriptor
 }
 
+private struct NativeShaderProgramRecord {
+    var name: String
+    var vertexLibrary: MTLLibrary
+    var fragmentLibrary: MTLLibrary
+    var vertexFunction: MTLFunction
+    var fragmentFunction: MTLFunction
+    var pipelineState: MTLRenderPipelineState?
+}
+
+private struct NativeUniformRecord {
+    var programHandle: Int64
+    var name: String
+    var set: Int32
+    var binding: Int32
+    var values: SIMD4<Float>
+}
+
 private final class MetalContextState {
     let window: NSWindow
     let contentView: NSView
@@ -96,6 +113,10 @@ private final class MetalContextState {
     var nativeBuffers: [Int64: NativeBufferRecord] = [:]
     var nextVertexDescriptorHandle: Int64 = 1
     var nativeVertexDescriptors: [Int64: NativeVertexDescriptorRecord] = [:]
+    var nextShaderProgramHandle: Int64 = 1
+    var nativeShaderPrograms: [Int64: NativeShaderProgramRecord] = [:]
+    var nextUniformHandle: Int64 = 1
+    var nativeUniforms: [Int64: NativeUniformRecord] = [:]
     var frameSerial: UInt64 = 0
     var uploadStagingBuffer: MTLBuffer?
     var uploadStagingCapacity: Int = 0
@@ -225,11 +246,15 @@ private func ensureUploadStagingBuffer(
 ) -> MTLBuffer? {
     let requestedCapacity = max(minimumCapacity, kUploadStagingInitialSize)
     let alignedCapacity = alignUp(requestedCapacity, alignment: kDynamicBufferAlignment)
-    if let existing = context.uploadStagingBuffer, context.uploadStagingCapacity >= alignedCapacity {
+    if let existing = context.uploadStagingBuffer, context.uploadStagingCapacity >= alignedCapacity
+    {
         return existing
     }
 
-    guard let stagingBuffer = context.device.makeBuffer(length: alignedCapacity, options: .storageModeShared) else {
+    guard
+        let stagingBuffer = context.device.makeBuffer(
+            length: alignedCapacity, options: .storageModeShared)
+    else {
         return nil
     }
     if (context.debugFlags & kDebugFlagLabels) != 0 {
@@ -257,10 +282,12 @@ private func reserveUploadStagingRange(
         context.uploadStagingWriteOffset = 0
     }
 
-    guard let stagingBuffer = ensureUploadStagingBuffer(
-        context: context,
-        minimumCapacity: alignedLength
-    ) else {
+    guard
+        let stagingBuffer = ensureUploadStagingBuffer(
+            context: context,
+            minimumCapacity: alignedLength
+        )
+    else {
         return nil
     }
 
@@ -284,7 +311,8 @@ private func markFrameSubmitted() {
 }
 
 private func shouldLogStateTransitions(_ context: MetalContextState) -> Bool {
-    return (context.debugFlags & kDebugFlagLabels) != 0 || (context.debugFlags & kDebugFlagValidation) != 0
+    return (context.debugFlags & kDebugFlagLabels) != 0
+        || (context.debugFlags & kDebugFlagValidation) != 0
 }
 
 private func logStateTransition(
@@ -548,7 +576,9 @@ private func mapVertexElementFormat(
     }
 }
 
-private func createPipelineState(context: MetalContextState, key: PipelineKey) -> MTLRenderPipelineState? {
+private func createPipelineState(context: MetalContextState, key: PipelineKey)
+    -> MTLRenderPipelineState?
+{
     if let cachedPipeline = context.pipelineCache[key] {
         return cachedPipeline
     }
@@ -580,7 +610,8 @@ private func createPipelineState(context: MetalContextState, key: PipelineKey) -
         colorAttachment.isBlendingEnabled = false
     }
 
-    guard let pipelineState = try? context.device.makeRenderPipelineState(descriptor: descriptor) else {
+    guard let pipelineState = try? context.device.makeRenderPipelineState(descriptor: descriptor)
+    else {
         return nil
     }
 
@@ -588,13 +619,52 @@ private func createPipelineState(context: MetalContextState, key: PipelineKey) -
     return pipelineState
 }
 
-private func createDepthStencilState(context: MetalContextState, key: DepthStencilKey) -> MTLDepthStencilState? {
+private func compileShaderProgramPipeline(
+    context: MetalContextState,
+    programHandle: Int64,
+    vertexDescriptorHandle: Int64
+) -> Int32 {
+    guard var program = context.nativeShaderPrograms[programHandle] else {
+        return kStatusInvalidArgument
+    }
+
+    let descriptor = MTLRenderPipelineDescriptor()
+    descriptor.vertexFunction = program.vertexFunction
+    descriptor.fragmentFunction = program.fragmentFunction
+    descriptor.rasterSampleCount = 1
+    guard let colorAttachment = descriptor.colorAttachments[0] else {
+        return kStatusInitializationFailed
+    }
+    colorAttachment.pixelFormat = context.layer.pixelFormat
+
+    if vertexDescriptorHandle != 0 {
+        guard let vertexDescriptorRecord = context.nativeVertexDescriptors[vertexDescriptorHandle]
+        else {
+            return kStatusInvalidArgument
+        }
+        descriptor.vertexDescriptor = vertexDescriptorRecord.descriptor
+    }
+
+    guard let compiledPipeline = try? context.device.makeRenderPipelineState(descriptor: descriptor)
+    else {
+        return kStatusInitializationFailed
+    }
+
+    program.pipelineState = compiledPipeline
+    context.nativeShaderPrograms[programHandle] = program
+    return kStatusOk
+}
+
+private func createDepthStencilState(context: MetalContextState, key: DepthStencilKey)
+    -> MTLDepthStencilState?
+{
     if let cachedDepthStencilState = context.depthStencilCache[key] {
         return cachedDepthStencilState
     }
 
     let descriptor = MTLDepthStencilDescriptor()
-    descriptor.depthCompareFunction = key.depthTestEnabled ? mapCompareFunction(key.depthCompareFunction) : .always
+    descriptor.depthCompareFunction =
+        key.depthTestEnabled ? mapCompareFunction(key.depthCompareFunction) : .always
     descriptor.isDepthWriteEnabled = key.depthTestEnabled && key.depthWriteEnabled
 
     if key.stencilEnabled {
@@ -609,7 +679,8 @@ private func createDepthStencilState(context: MetalContextState, key: DepthStenc
         descriptor.backFaceStencil = stencilDescriptor
     }
 
-    guard let depthStencilState = context.device.makeDepthStencilState(descriptor: descriptor) else {
+    guard let depthStencilState = context.device.makeDepthStencilState(descriptor: descriptor)
+    else {
         return nil
     }
 
@@ -637,7 +708,8 @@ private func configureEncoderState(
     guard let pipelineState = createPipelineState(context: context, key: pipelineKey) else {
         return kStatusInitializationFailed
     }
-    guard let depthStencilState = createDepthStencilState(context: context, key: depthStencilKey) else {
+    guard let depthStencilState = createDepthStencilState(context: context, key: depthStencilKey)
+    else {
         return kStatusInitializationFailed
     }
 
@@ -716,13 +788,15 @@ public func mcmetal_swift_initialize(
             return nil
         }
 
-        guard let shaderLibrary = try? device.makeLibrary(source: kDemoShaderSource, options: nil) else {
+        guard let shaderLibrary = try? device.makeLibrary(source: kDemoShaderSource, options: nil)
+        else {
             return nil
         }
         guard let vertexFunction = shaderLibrary.makeFunction(name: kDemoVertexFunctionName) else {
             return nil
         }
-        guard let fragmentFunction = shaderLibrary.makeFunction(name: kDemoFragmentFunctionName) else {
+        guard let fragmentFunction = shaderLibrary.makeFunction(name: kDemoFragmentFunctionName)
+        else {
             return nil
         }
 
@@ -857,7 +931,8 @@ public func mcmetal_swift_render_demo_frame(
             return kStatusInitializationFailed
         }
 
-        let setupStatus = configureEncoderState(context: context, encoder: encoder, primitiveType: 0x0004)
+        let setupStatus = configureEncoderState(
+            context: context, encoder: encoder, primitiveType: 0x0004)
         if setupStatus != kStatusOk {
             encoder.endEncoding()
             return setupStatus
@@ -913,7 +988,8 @@ public func mcmetal_swift_set_blend_equation(
     _ alphaEquation: Int32
 ) -> Int32 {
     return withContextState { context in
-        let changed = context.renderStateTracker.setBlendEquation(rgb: rgbEquation, alpha: alphaEquation)
+        let changed = context.renderStateTracker.setBlendEquation(
+            rgb: rgbEquation, alpha: alphaEquation)
         logStateTransition(context: context, operation: "set_blend_equation", changed: changed)
         return kStatusOk
     }
@@ -969,7 +1045,8 @@ public func mcmetal_swift_set_cull_state(
     _ cullMode: Int32
 ) -> Int32 {
     return withContextState { context in
-        let changed = context.renderStateTracker.setCullState(enabled: cullEnabled != 0, mode: cullMode)
+        let changed = context.renderStateTracker.setCullState(
+            enabled: cullEnabled != 0, mode: cullMode)
         logStateTransition(context: context, operation: "set_cull_state", changed: changed)
         return kStatusOk
     }
@@ -1083,7 +1160,8 @@ public func mcmetal_swift_draw(
             return kStatusInitializationFailed
         }
 
-        let setupStatus = configureEncoderState(context: context, encoder: encoder, primitiveType: mode)
+        let setupStatus = configureEncoderState(
+            context: context, encoder: encoder, primitiveType: mode)
         if setupStatus != kStatusOk {
             encoder.endEncoding()
             return setupStatus
@@ -1170,7 +1248,8 @@ public func mcmetal_swift_draw_indexed(
             return kStatusInitializationFailed
         }
 
-        let setupStatus = configureEncoderState(context: context, encoder: encoder, primitiveType: mode)
+        let setupStatus = configureEncoderState(
+            context: context, encoder: encoder, primitiveType: mode)
         if setupStatus != kStatusOk {
             encoder.endEncoding()
             return setupStatus
@@ -1221,12 +1300,16 @@ private func createNativeBufferRecord(
     let logicalSize = Int(size)
     let dynamicUsage = usage == kBufferUsageDynamic
     let slotCount = dynamicUsage ? kDynamicBufferSlotCount : 1
-    let slotSize = dynamicUsage
+    let slotSize =
+        dynamicUsage
         ? alignUp(logicalSize, alignment: kDynamicBufferAlignment)
         : logicalSize
     let allocationLength = slotSize * slotCount
 
-    guard let metalBuffer = context.device.makeBuffer(length: allocationLength, options: .storageModeShared) else {
+    guard
+        let metalBuffer = context.device.makeBuffer(
+            length: allocationLength, options: .storageModeShared)
+    else {
         return nil
     }
     if (context.debugFlags & kDebugFlagLabels) != 0 {
@@ -1266,13 +1349,15 @@ public func mcmetal_swift_create_buffer(
     }
 
     return withContextStateValue(0) { context in
-        guard let record = createNativeBufferRecord(
-            context: context,
-            usage: usage,
-            size: size,
-            initialData: initialData,
-            initialDataLength: initialDataLength
-        ) else {
+        guard
+            let record = createNativeBufferRecord(
+                context: context,
+                usage: usage,
+                size: size,
+                initialData: initialData,
+                initialDataLength: initialDataLength
+            )
+        else {
             return 0
         }
 
@@ -1325,7 +1410,10 @@ public func mcmetal_swift_update_buffer(
         }
 
         if let data, updateLength > 0 {
-            guard let stagingRange = reserveUploadStagingRange(context: context, byteCount: updateLength) else {
+            guard
+                let stagingRange = reserveUploadStagingRange(
+                    context: context, byteCount: updateLength)
+            else {
                 return kStatusInitializationFailed
             }
             let stagingPointer = stagingRange.buffer.contents().advanced(by: stagingRange.offset)
@@ -1374,7 +1462,8 @@ private func parseVertexDescriptorElements(
             && usage != kVertexUsageNormal
             && usage != kVertexUsageColor
             && usage != kVertexUsageUV
-            && usage != kVertexUsageGeneric {
+            && usage != kVertexUsageGeneric
+        {
             return nil
         }
 
@@ -1410,11 +1499,13 @@ public func mcmetal_swift_register_vertex_descriptor(
         guard let packedElements else {
             return 0
         }
-        guard let elements = parseVertexDescriptorElements(
-            attributeCount: attributeCount,
-            packedElements: packedElements,
-            packedIntCount: packedIntCount
-        ) else {
+        guard
+            let elements = parseVertexDescriptorElements(
+                attributeCount: attributeCount,
+                packedElements: packedElements,
+                packedIntCount: packedIntCount
+            )
+        else {
             return 0
         }
 
@@ -1427,11 +1518,13 @@ public func mcmetal_swift_register_vertex_descriptor(
             guard let attributeDescriptor = descriptor.attributes[index] else {
                 return 0
             }
-            guard let format = mapVertexElementFormat(
-                componentType: element.componentType,
-                componentCount: element.componentCount,
-                normalized: element.normalized != 0
-            ) else {
+            guard
+                let format = mapVertexElementFormat(
+                    componentType: element.componentType,
+                    componentCount: element.componentCount,
+                    normalized: element.normalized != 0
+                )
+            else {
                 return 0
             }
 
@@ -1455,6 +1548,155 @@ public func mcmetal_swift_register_vertex_descriptor(
             descriptor: descriptor
         )
         return handle
+    }
+}
+
+@_cdecl("mcmetal_swift_create_shader_program")
+public func mcmetal_swift_create_shader_program(
+    _ programName: UnsafePointer<CChar>?,
+    _ vertexMslSource: UnsafePointer<CChar>?,
+    _ fragmentMslSource: UnsafePointer<CChar>?
+) -> Int64 {
+    guard let programName, let vertexMslSource, let fragmentMslSource else {
+        return 0
+    }
+
+    let name = String(cString: programName)
+    let vertexSource = String(cString: vertexMslSource)
+    let fragmentSource = String(cString: fragmentMslSource)
+    if name.isEmpty || vertexSource.isEmpty || fragmentSource.isEmpty {
+        return 0
+    }
+
+    return withContextStateValue(0) { context in
+        guard
+            let vertexLibrary = try? context.device.makeLibrary(source: vertexSource, options: nil)
+        else {
+            return 0
+        }
+        guard
+            let fragmentLibrary = try? context.device.makeLibrary(
+                source: fragmentSource, options: nil)
+        else {
+            return 0
+        }
+
+        let candidateEntryPoints = ["main0", "main"]
+        var vertexFunction: MTLFunction?
+        var fragmentFunction: MTLFunction?
+        for entryPoint in candidateEntryPoints where vertexFunction == nil {
+            vertexFunction = vertexLibrary.makeFunction(name: entryPoint)
+        }
+        for entryPoint in candidateEntryPoints where fragmentFunction == nil {
+            fragmentFunction = fragmentLibrary.makeFunction(name: entryPoint)
+        }
+
+        guard let vertexFunction, let fragmentFunction else {
+            return 0
+        }
+
+        let handle = context.nextShaderProgramHandle
+        context.nextShaderProgramHandle = handle &+ 1
+        context.nativeShaderPrograms[handle] = NativeShaderProgramRecord(
+            name: name,
+            vertexLibrary: vertexLibrary,
+            fragmentLibrary: fragmentLibrary,
+            vertexFunction: vertexFunction,
+            fragmentFunction: fragmentFunction,
+            pipelineState: nil
+        )
+        return handle
+    }
+}
+
+@_cdecl("mcmetal_swift_compile_shader_pipeline")
+public func mcmetal_swift_compile_shader_pipeline(
+    _ programHandle: Int64,
+    _ vertexDescriptorHandle: Int64
+) -> Int32 {
+    if programHandle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        return compileShaderProgramPipeline(
+            context: context,
+            programHandle: programHandle,
+            vertexDescriptorHandle: vertexDescriptorHandle
+        )
+    }
+}
+
+@_cdecl("mcmetal_swift_register_uniform")
+public func mcmetal_swift_register_uniform(
+    _ programHandle: Int64,
+    _ uniformName: UnsafePointer<CChar>?,
+    _ set: Int32,
+    _ binding: Int32
+) -> Int64 {
+    guard programHandle > 0, let uniformName else {
+        return 0
+    }
+
+    let name = String(cString: uniformName)
+    if name.isEmpty {
+        return 0
+    }
+
+    return withContextStateValue(0) { context in
+        guard context.nativeShaderPrograms[programHandle] != nil else {
+            return 0
+        }
+
+        let handle = context.nextUniformHandle
+        context.nextUniformHandle = handle &+ 1
+        context.nativeUniforms[handle] = NativeUniformRecord(
+            programHandle: programHandle,
+            name: name,
+            set: set,
+            binding: binding,
+            values: SIMD4<Float>(repeating: 0)
+        )
+        return handle
+    }
+}
+
+@_cdecl("mcmetal_swift_update_uniform_float4")
+public func mcmetal_swift_update_uniform_float4(
+    _ uniformHandle: Int64,
+    _ x: Float,
+    _ y: Float,
+    _ z: Float,
+    _ w: Float
+) -> Int32 {
+    if uniformHandle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard var uniformRecord = context.nativeUniforms[uniformHandle] else {
+            return kStatusInvalidArgument
+        }
+        uniformRecord.values = SIMD4<Float>(x, y, z, w)
+        context.nativeUniforms[uniformHandle] = uniformRecord
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_destroy_shader_program")
+public func mcmetal_swift_destroy_shader_program(_ programHandle: Int64) -> Int32 {
+    if programHandle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard context.nativeShaderPrograms.removeValue(forKey: programHandle) != nil else {
+            return kStatusInvalidArgument
+        }
+        context.nativeUniforms = context.nativeUniforms.filter { _, uniform in
+            uniform.programHandle != programHandle
+        }
+        return kStatusOk
     }
 }
 

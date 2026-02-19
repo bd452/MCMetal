@@ -6,7 +6,9 @@
   "client": [
     "BufferBuilderMixin",
     "VertexBufferMixin",
-    "RenderSystemMixin"
+    "RenderSystemMixin",
+    "ShaderProgramMixin",
+    "ShaderStageMixin"
   ],
   "injectors": {
     "defaultRequire": 1
