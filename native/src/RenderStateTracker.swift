@@ -56,6 +56,107 @@ struct RenderStateSnapshot: Equatable {
     var raster = RasterState()
     var scissor = ScissorState()
     var viewport = ViewportState()
+
+    func makePipelineKey(colorPixelFormat: Int32, sampleCount: Int32, primitiveType: Int32) -> PipelineKey {
+        return PipelineKey(
+            blendEnabled: blend.enabled,
+            blendSrcRGB: blend.srcRGB,
+            blendDstRGB: blend.dstRGB,
+            blendSrcAlpha: blend.srcAlpha,
+            blendDstAlpha: blend.dstAlpha,
+            blendEquationRGB: blend.equationRGB,
+            blendEquationAlpha: blend.equationAlpha,
+            cullEnabled: raster.cullEnabled,
+            cullMode: raster.cullMode,
+            colorPixelFormat: colorPixelFormat,
+            sampleCount: max(sampleCount, 1),
+            primitiveType: primitiveType
+        )
+    }
+
+    func makeDepthStencilKey() -> DepthStencilKey {
+        return DepthStencilKey(
+            depthTestEnabled: depth.testEnabled,
+            depthWriteEnabled: depth.writeEnabled,
+            depthCompareFunction: depth.compareFunction,
+            stencilEnabled: stencil.enabled,
+            stencilFunction: stencil.function,
+            stencilReference: stencil.reference,
+            stencilCompareMask: stencil.compareMask,
+            stencilWriteMask: stencil.writeMask,
+            stencilSFail: stencil.sfail,
+            stencilDpFail: stencil.dpfail,
+            stencilDpPass: stencil.dppass
+        )
+    }
+}
+
+struct PipelineKey: Hashable {
+    let blendEnabled: Bool
+    let blendSrcRGB: Int32
+    let blendDstRGB: Int32
+    let blendSrcAlpha: Int32
+    let blendDstAlpha: Int32
+    let blendEquationRGB: Int32
+    let blendEquationAlpha: Int32
+    let cullEnabled: Bool
+    let cullMode: Int32
+    let colorPixelFormat: Int32
+    let sampleCount: Int32
+    let primitiveType: Int32
+
+    var stableHash: UInt64 {
+        var seed: UInt64 = 0xCBF29CE484222325
+        seed = mixStableHash(seed, blendEnabled ? 1 : 0)
+        seed = mixStableHash(seed, Int64(blendSrcRGB))
+        seed = mixStableHash(seed, Int64(blendDstRGB))
+        seed = mixStableHash(seed, Int64(blendSrcAlpha))
+        seed = mixStableHash(seed, Int64(blendDstAlpha))
+        seed = mixStableHash(seed, Int64(blendEquationRGB))
+        seed = mixStableHash(seed, Int64(blendEquationAlpha))
+        seed = mixStableHash(seed, cullEnabled ? 1 : 0)
+        seed = mixStableHash(seed, Int64(cullMode))
+        seed = mixStableHash(seed, Int64(colorPixelFormat))
+        seed = mixStableHash(seed, Int64(sampleCount))
+        seed = mixStableHash(seed, Int64(primitiveType))
+        return seed
+    }
+}
+
+struct DepthStencilKey: Hashable {
+    let depthTestEnabled: Bool
+    let depthWriteEnabled: Bool
+    let depthCompareFunction: Int32
+    let stencilEnabled: Bool
+    let stencilFunction: Int32
+    let stencilReference: Int32
+    let stencilCompareMask: Int32
+    let stencilWriteMask: Int32
+    let stencilSFail: Int32
+    let stencilDpFail: Int32
+    let stencilDpPass: Int32
+
+    var stableHash: UInt64 {
+        var seed: UInt64 = 0x84222325CBF29CE4
+        seed = mixStableHash(seed, depthTestEnabled ? 1 : 0)
+        seed = mixStableHash(seed, depthWriteEnabled ? 1 : 0)
+        seed = mixStableHash(seed, Int64(depthCompareFunction))
+        seed = mixStableHash(seed, stencilEnabled ? 1 : 0)
+        seed = mixStableHash(seed, Int64(stencilFunction))
+        seed = mixStableHash(seed, Int64(stencilReference))
+        seed = mixStableHash(seed, Int64(stencilCompareMask))
+        seed = mixStableHash(seed, Int64(stencilWriteMask))
+        seed = mixStableHash(seed, Int64(stencilSFail))
+        seed = mixStableHash(seed, Int64(stencilDpFail))
+        seed = mixStableHash(seed, Int64(stencilDpPass))
+        return seed
+    }
+}
+
+private func mixStableHash(_ seed: UInt64, _ value: Int64) -> UInt64 {
+    let prime: UInt64 = 0x100000001B3
+    let valueBits = UInt64(bitPattern: value)
+    return (seed ^ valueBits) &* prime
 }
 
 final class RenderStateTracker {
@@ -148,6 +249,18 @@ final class RenderStateTracker {
             next.viewport.minDepth = min(max(minDepth, 0.0), 1.0)
             next.viewport.maxDepth = min(max(maxDepth, 0.0), 1.0)
         }
+    }
+
+    func makePipelineKey(colorPixelFormat: Int32, sampleCount: Int32, primitiveType: Int32) -> PipelineKey {
+        return snapshot.makePipelineKey(
+            colorPixelFormat: colorPixelFormat,
+            sampleCount: sampleCount,
+            primitiveType: primitiveType
+        )
+    }
+
+    func makeDepthStencilKey() -> DepthStencilKey {
+        return snapshot.makeDepthStencilKey()
     }
 
     private func updateSnapshot(_ mutate: (inout RenderStateSnapshot) -> Void) -> Bool {

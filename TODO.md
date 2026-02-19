@@ -33,7 +33,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
 - [ ] 3. Phase 2 - RenderSystem State Translation
   - [x] Implement Java mixins for core `RenderSystem` state calls.
   - [x] Build normalized Swift-native state tracker (blend, depth, stencil, cull, scissor, viewport).
-  - [ ] Implement deterministic state-to-key conversion for pipeline/depth-stencil lookup.
+  - [x] Implement deterministic state-to-key conversion for pipeline/depth-stencil lookup.
   - [ ] Add command encoder setup based on tracked state snapshots.
   - [ ] Implement basic draw submission for simple world/UI primitives.
   - [ ] Validate state transition correctness with debug assertions and logs.
