@@ -15,9 +15,16 @@ import java.util.function.IntSupplier;
  * <p>Phase 2 progressively wires these callbacks to the native state tracker.
  */
 public final class MetalRenderSystemBridge {
+    @FunctionalInterface
+    interface StateSubmissionHook {
+        int submit(String operation, IntSupplier nativeCall);
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(MetalRenderSystemBridge.class);
     private static final boolean DRAW_SUBMISSION_ENABLED = Boolean.getBoolean("mcmetal.phase2.enableDrawSubmission");
     private static final boolean DEBUG_STATE_LOGS = Boolean.getBoolean("mcmetal.phase2.debugStateTransitions");
+    private static volatile StateSubmissionHook stateSubmissionHook;
+    private static volatile Boolean bridgeActiveOverrideForTests;
 
     private static volatile boolean blendEnabled;
     private static volatile int blendSrcRgb = 1;
@@ -55,6 +62,58 @@ public final class MetalRenderSystemBridge {
     private static volatile int viewportHeight = 1;
 
     private MetalRenderSystemBridge() {
+    }
+
+    static void setStateSubmissionHookForTests(StateSubmissionHook hook) {
+        stateSubmissionHook = hook;
+    }
+
+    static void setBridgeActiveForTests(boolean active) {
+        bridgeActiveOverrideForTests = active;
+    }
+
+    static void clearBridgeActiveOverrideForTests() {
+        bridgeActiveOverrideForTests = null;
+    }
+
+    static void resetForTests() {
+        stateSubmissionHook = null;
+        bridgeActiveOverrideForTests = null;
+
+        blendEnabled = false;
+        blendSrcRgb = 1;
+        blendDstRgb = 0;
+        blendSrcAlpha = 1;
+        blendDstAlpha = 0;
+        blendEquationRgb = 0x8006;
+        blendEquationAlpha = 0x8006;
+
+        depthTestEnabled = false;
+        depthWriteMask = true;
+        depthCompareFunction = 0x0203;
+
+        stencilEnabled = false;
+        stencilFunction = 0x0207;
+        stencilReference = 0;
+        stencilCompareMask = 0xFF;
+        stencilWriteMask = 0xFF;
+        stencilSFail = 0x1E00;
+        stencilDpFail = 0x1E00;
+        stencilDpPass = 0x1E00;
+
+        cullEnabled = true;
+        cullMode = 0x0405;
+
+        scissorEnabled = false;
+        scissorX = 0;
+        scissorY = 0;
+        scissorWidth = 1;
+        scissorHeight = 1;
+
+        viewportX = 0;
+        viewportY = 0;
+        viewportWidth = 1;
+        viewportHeight = 1;
     }
 
     public static void onEnableBlend() {
@@ -372,6 +431,10 @@ public final class MetalRenderSystemBridge {
     }
 
     private static boolean isBridgeActive() {
+        Boolean bridgeActiveOverride = bridgeActiveOverrideForTests;
+        if (bridgeActiveOverride != null) {
+            return bridgeActiveOverride;
+        }
         return HostPlatform.isMacOs() && MetalPhaseOneBridge.isInitialized();
     }
 
@@ -379,7 +442,8 @@ public final class MetalRenderSystemBridge {
         if (DEBUG_STATE_LOGS) {
             LOGGER.debug("event=metal_phase2 phase=state_submit operation={}", operation);
         }
-        int statusCode = nativeCall.getAsInt();
+        StateSubmissionHook hook = stateSubmissionHook;
+        int statusCode = hook != null ? hook.submit(operation, nativeCall) : nativeCall.getAsInt();
         if (NativeStatus.isSuccess(statusCode)) {
             return;
         }

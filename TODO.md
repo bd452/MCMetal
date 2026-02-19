@@ -30,14 +30,14 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Ensure no runtime dependency on active OpenGL rendering context.
   - [x] Add debug labels and validation toggles for early bring-up diagnostics.
 
-- [ ] 3. Phase 2 - RenderSystem State Translation
+- [x] 3. Phase 2 - RenderSystem State Translation
   - [x] Implement Java mixins for core `RenderSystem` state calls.
   - [x] Build normalized Swift-native state tracker (blend, depth, stencil, cull, scissor, viewport).
   - [x] Implement deterministic state-to-key conversion for pipeline/depth-stencil lookup.
   - [x] Add command encoder setup based on tracked state snapshots.
   - [x] Implement basic draw submission for simple world/UI primitives.
   - [x] Validate state transition correctness with debug assertions and logs.
-  - [ ] Add regression checks for frequent state-change scenarios.
+  - [x] Add regression checks for frequent state-change scenarios.
 
 - [ ] 4. Phase 3 - Buffers, Vertex Formats, and Draw Path
   - [ ] Intercept and map `BufferBuilder`/`VertexBuffer` data flows to native buffer APIs.
