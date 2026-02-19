@@ -19,14 +19,14 @@
   - [x] Add initial CI pipeline to build Java and native artifacts on macOS runners.
   - [x] Document local development setup and build prerequisites.
 
-- [ ] 2. Phase 1 - Window and Surface Bring-Up
-  - [ ] Add window interception and retrieve Cocoa window handle from GLFW.
-  - [ ] Attach/configure `CAMetalLayer` on Minecraft window content view.
-  - [ ] Initialize `MTLDevice` and `MTLCommandQueue`.
-  - [ ] Implement frame clear + present demo path through Metal.
-  - [ ] Wire drawable resize handling (window resize, retina scale changes, fullscreen transitions).
-  - [ ] Ensure no runtime dependency on active OpenGL rendering context.
-  - [ ] Add debug labels and validation toggles for early bring-up diagnostics.
+- [x] 2. Phase 1 - Window and Surface Bring-Up
+  - [x] Add window interception and retrieve Cocoa window handle from GLFW.
+  - [x] Attach/configure `CAMetalLayer` on Minecraft window content view.
+  - [x] Initialize `MTLDevice` and `MTLCommandQueue`.
+  - [x] Implement frame clear + present demo path through Metal.
+  - [x] Wire drawable resize handling (window resize, retina scale changes, fullscreen transitions).
+  - [x] Ensure no runtime dependency on active OpenGL rendering context.
+  - [x] Add debug labels and validation toggles for early bring-up diagnostics.
 
 - [ ] 3. Phase 2 - RenderSystem State Translation
   - [ ] Implement Java mixins for core `RenderSystem` state calls.

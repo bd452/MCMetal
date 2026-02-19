@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "io.github.mcmetal.MCMetalMod"
+    ],
+    "client": [
+      "io.github.mcmetal.MCMetalClientMod"
     ]
   },
   "mixins": [
