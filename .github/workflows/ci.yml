@@ -32,7 +32,7 @@ jobs:
           xcrun swift --version
 
       - name: Build project
-        run: ./gradlew --no-daemon clean build
+        run: ./gradlew --no-daemon --build-cache build
 
       - name: Upload Java artifacts
         uses: actions/upload-artifact@v4

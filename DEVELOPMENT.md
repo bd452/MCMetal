@@ -36,16 +36,33 @@ xcrun swift --version
 From repository root:
 
 ```bash
-./gradlew --no-daemon clean build
+./gradlew build
 ```
 
 This command runs Java compilation, unit tests, and (on macOS) native configure/build/smoke-check tasks.
+For normal local iteration, avoid `clean` and avoid `--no-daemon` so Gradle can reuse
+up-to-date task outputs, local build cache entries, and a warm daemon.
+
+Use `clean` only when you intentionally want a full rebuild:
+
+```bash
+./gradlew clean build
+```
+
+### Fast local test loop
+
+```bash
+./gradlew test
+./gradlew test --continuous
+```
+
+- `./gradlew test` skips execution when nothing changed (`UP-TO-DATE`).
+- `--continuous` keeps Gradle running and re-runs tests only when inputs change.
 
 ### Useful targeted tasks
 
 ```bash
 ./gradlew nativeConfigure nativeBuild nativeTest
-./gradlew test
 ./gradlew publishToMavenLocal
 ```
 
@@ -69,6 +86,6 @@ Gradle stages this artifact into mod resources under:
 
 GitHub Actions workflow `.github/workflows/ci.yml` runs on `macos-14` and:
 
-1. Builds Java + native artifacts with `./gradlew clean build`
+1. Builds Java + native artifacts with `./gradlew --no-daemon --build-cache build`
 2. Uploads remapped Java jars from `build/libs/`
 3. Uploads `build/native/libminecraft_metal.dylib`
