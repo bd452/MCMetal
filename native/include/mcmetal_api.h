@@ -126,6 +126,14 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestr
     jclass clazz,
     jlong handle);
 
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
+    JNIEnv *env,
+    jclass clazz,
+    jint stride_bytes,
+    jint attribute_count,
+    jobject packed_elements,
+    jint packed_byte_length);
+
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
     jclass clazz);

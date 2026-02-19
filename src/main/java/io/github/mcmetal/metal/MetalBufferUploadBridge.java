@@ -27,6 +27,8 @@ public final class MetalBufferUploadBridge {
         int updateBuffer(long handle, int offset, ByteBuffer data, int dataLength);
 
         int destroyBuffer(long handle);
+
+        long registerVertexDescriptor(int strideBytes, int attributeCount, ByteBuffer packedElements, int packedByteLength);
     }
 
     enum BufferUsage {
@@ -73,6 +75,7 @@ public final class MetalBufferUploadBridge {
     private static final boolean DEBUG_BUFFER_LOGS = Boolean.getBoolean("mcmetal.phase3.debugBufferBridge");
     private static final Map<Object, UploadSnapshot> SNAPSHOT_CACHE = Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<Object, NativeBufferRecord> BUFFER_RECORDS = Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final Map<VertexFormat, Long> VERTEX_DESCRIPTOR_CACHE = Collections.synchronizedMap(new WeakHashMap<>());
 
     private static volatile NativeBufferBackend nativeBufferBackend = new JniNativeBufferBackend();
     private static volatile Boolean bridgeActiveOverrideForTests;
@@ -171,6 +174,7 @@ public final class MetalBufferUploadBridge {
     static void resetForTests() {
         SNAPSHOT_CACHE.clear();
         BUFFER_RECORDS.clear();
+        VERTEX_DESCRIPTOR_CACHE.clear();
         nativeBufferBackend = new JniNativeBufferBackend();
         bridgeActiveOverrideForTests = null;
     }
@@ -190,6 +194,7 @@ public final class MetalBufferUploadBridge {
         }
 
         NativeBufferRecord record = BUFFER_RECORDS.computeIfAbsent(vertexBufferIdentity, key -> new NativeBufferRecord());
+        record.vertexDescriptorHandle = ensureVertexDescriptor(snapshot.format);
         record.vertexAllocation = uploadAllocation(record.vertexAllocation, usage, snapshot.vertexData, "vertex");
 
         if (snapshot.indexData != null && snapshot.indexData.remaining() > 0) {
@@ -202,18 +207,47 @@ public final class MetalBufferUploadBridge {
         record.lastSnapshot = snapshot;
         if (DEBUG_BUFFER_LOGS) {
             LOGGER.debug(
-                "event=metal_phase3 phase=vertex_upload usage={} vertex_handle={} vertex_bytes={} index_handle={} index_bytes={} mode={} vertex_count={} index_count={} index_type={}",
+                "event=metal_phase3 phase=vertex_upload usage={} vertex_handle={} vertex_bytes={} index_handle={} index_bytes={} descriptor_handle={} mode={} vertex_count={} index_count={} index_type={}",
                 usage,
                 record.vertexAllocation.handle,
                 snapshot.vertexData.remaining(),
                 record.indexAllocation.handle,
                 snapshot.indexData == null ? 0 : snapshot.indexData.remaining(),
+                record.vertexDescriptorHandle,
                 snapshot.modeGl,
                 snapshot.vertexCount,
                 snapshot.indexCount,
                 snapshot.indexTypeGl
             );
         }
+    }
+
+    private static long ensureVertexDescriptor(VertexFormat format) {
+        Long cachedHandle = VERTEX_DESCRIPTOR_CACHE.get(format);
+        if (cachedHandle != null && cachedHandle > 0L) {
+            return cachedHandle;
+        }
+
+        MetalVertexDescriptorMapper.NativeVertexDescriptor descriptor = MetalVertexDescriptorMapper.map(format);
+        ByteBuffer payload = descriptor.packedElements().duplicate();
+        long descriptorHandle = nativeBufferBackend.registerVertexDescriptor(
+            descriptor.strideBytes(),
+            descriptor.attributeCount(),
+            payload,
+            descriptor.byteLength()
+        );
+        if (descriptorHandle <= 0L) {
+            throw new NativeBridgeException(
+                "Native operation nativeRegisterVertexDescriptor failed for stride="
+                    + descriptor.strideBytes()
+                    + " attributeCount="
+                    + descriptor.attributeCount()
+                    + "."
+            );
+        }
+
+        VERTEX_DESCRIPTOR_CACHE.put(format, descriptorHandle);
+        return descriptorHandle;
     }
 
     private static BufferAllocation uploadAllocation(
@@ -331,6 +365,7 @@ public final class MetalBufferUploadBridge {
     private static final class NativeBufferRecord {
         private BufferAllocation vertexAllocation = new BufferAllocation();
         private BufferAllocation indexAllocation = new BufferAllocation();
+        private long vertexDescriptorHandle;
         private UploadSnapshot lastSnapshot;
     }
 
@@ -353,6 +388,16 @@ public final class MetalBufferUploadBridge {
         @Override
         public int destroyBuffer(long handle) {
             return NativeApi.nativeDestroyBuffer(handle);
+        }
+
+        @Override
+        public long registerVertexDescriptor(int strideBytes, int attributeCount, ByteBuffer packedElements, int packedByteLength) {
+            return NativeApi.nativeRegisterVertexDescriptor(
+                strideBytes,
+                attributeCount,
+                packedElements,
+                packedByteLength
+            );
         }
     }
 }

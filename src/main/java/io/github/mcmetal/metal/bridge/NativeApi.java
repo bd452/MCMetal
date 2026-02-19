@@ -52,5 +52,12 @@ public final class NativeApi {
 
     public static native int nativeDestroyBuffer(long handle);
 
+    public static native long nativeRegisterVertexDescriptor(
+        int strideBytes,
+        int attributeCount,
+        ByteBuffer packedElements,
+        int packedByteLength
+    );
+
     public static native void nativeShutdown();
 }

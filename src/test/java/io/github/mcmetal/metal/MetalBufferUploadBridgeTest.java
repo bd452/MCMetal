@@ -42,6 +42,7 @@ class MetalBufferUploadBridgeTest {
 
         assertEquals(2, backend.createCalls);
         assertEquals(List.of(64, 24), backend.createdSizes);
+        assertEquals(1, backend.registerDescriptorCalls);
         assertEquals(0, backend.updateCalls);
         assertEquals(0, backend.destroyCalls);
     }
@@ -67,6 +68,7 @@ class MetalBufferUploadBridgeTest {
 
         assertEquals(2, backend.createCalls);
         assertEquals(2, backend.updateCalls);
+        assertEquals(1, backend.registerDescriptorCalls);
         assertEquals(0, backend.destroyCalls);
     }
 
@@ -90,6 +92,7 @@ class MetalBufferUploadBridgeTest {
         );
 
         assertEquals(4, backend.createCalls);
+        assertEquals(1, backend.registerDescriptorCalls);
         assertEquals(2, backend.destroyCalls);
     }
 
@@ -110,6 +113,7 @@ class MetalBufferUploadBridgeTest {
 
         assertEquals(1, backend.createCalls);
         assertEquals(List.of(80), backend.createdSizes);
+        assertEquals(1, backend.registerDescriptorCalls);
     }
 
     @Test
@@ -156,6 +160,7 @@ class MetalBufferUploadBridgeTest {
         private int createCalls;
         private int updateCalls;
         private int destroyCalls;
+        private int registerDescriptorCalls;
         private final List<Integer> createdSizes = new ArrayList<>();
 
         @Override
@@ -175,6 +180,12 @@ class MetalBufferUploadBridgeTest {
         public int destroyBuffer(long handle) {
             destroyCalls++;
             return 0;
+        }
+
+        @Override
+        public long registerVertexDescriptor(int strideBytes, int attributeCount, ByteBuffer packedElements, int packedByteLength) {
+            registerDescriptorCalls++;
+            return nextHandle++;
         }
     }
 }

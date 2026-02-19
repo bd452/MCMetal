@@ -91,6 +91,12 @@ int32_t mcmetal_swift_update_buffer(
 int32_t mcmetal_swift_destroy_buffer(
     int64_t handle);
 
+int64_t mcmetal_swift_register_vertex_descriptor(
+    int32_t stride_bytes,
+    int32_t attribute_count,
+    const int32_t *packed_elements,
+    int32_t packed_int_count);
+
 void mcmetal_swift_shutdown(void);
 
 #ifdef __cplusplus

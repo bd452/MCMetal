@@ -249,6 +249,35 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestr
   return (jint)mcmetal_swift_destroy_buffer((int64_t)handle);
 }
 
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
+    JNIEnv *env,
+    jclass clazz,
+    jint stride_bytes,
+    jint attribute_count,
+    jobject packed_elements,
+    jint packed_byte_length) {
+  (void)clazz;
+  if (stride_bytes <= 0 || attribute_count <= 0 || packed_elements == NULL || packed_byte_length <= 0) {
+    return (jlong)0;
+  }
+
+  const int32_t *packed_ptr = (const int32_t *)(*env)->GetDirectBufferAddress(env, packed_elements);
+  if (packed_ptr == NULL) {
+    return (jlong)0;
+  }
+
+  int32_t packed_int_count = (int32_t)(packed_byte_length / (jint)sizeof(int32_t));
+  if (packed_int_count <= 0) {
+    return (jlong)0;
+  }
+
+  return (jlong)mcmetal_swift_register_vertex_descriptor(
+      (int32_t)stride_bytes,
+      (int32_t)attribute_count,
+      packed_ptr,
+      packed_int_count);
+}
+
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
     jclass clazz) {

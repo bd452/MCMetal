@@ -16,6 +16,12 @@ private let kBufferUsageDynamic: Int32 = 1
 private let kDynamicBufferSlotCount: Int = 3
 private let kDynamicBufferAlignment: Int = 256
 private let kUploadStagingInitialSize: Int = 4 * 1024 * 1024
+private let kPackedVertexDescriptorIntsPerAttribute: Int = 7
+private let kVertexUsagePosition: Int32 = 0
+private let kVertexUsageNormal: Int32 = 1
+private let kVertexUsageColor: Int32 = 2
+private let kVertexUsageUV: Int32 = 3
+private let kVertexUsageGeneric: Int32 = 4
 private let kDemoVertexFunctionName = "mcmetal_vertex_main"
 private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
 private let kDemoShaderSource = """
@@ -52,6 +58,22 @@ private struct NativeBufferRecord {
     let metalBuffer: MTLBuffer
 }
 
+private struct NativeVertexDescriptorElement {
+    let attributeIndex: Int32
+    let usage: Int32
+    let componentType: Int32
+    let componentCount: Int32
+    let offset: Int32
+    let normalized: Int32
+    let uvIndex: Int32
+}
+
+private struct NativeVertexDescriptorRecord {
+    var stride: Int
+    var elements: [NativeVertexDescriptorElement]
+    var descriptor: MTLVertexDescriptor
+}
+
 private final class MetalContextState {
     let window: NSWindow
     let contentView: NSView
@@ -72,6 +94,8 @@ private final class MetalContextState {
     var depthStencilCache: [DepthStencilKey: MTLDepthStencilState] = [:]
     var nextBufferHandle: Int64 = 1
     var nativeBuffers: [Int64: NativeBufferRecord] = [:]
+    var nextVertexDescriptorHandle: Int64 = 1
+    var nativeVertexDescriptors: [Int64: NativeVertexDescriptorRecord] = [:]
     var frameSerial: UInt64 = 0
     var uploadStagingBuffer: MTLBuffer?
     var uploadStagingCapacity: Int = 0
@@ -430,6 +454,95 @@ private func mapPrimitiveType(_ glMode: Int32) -> MTLPrimitiveType? {
         return .triangle
     case 0x0005:
         return .triangleStrip
+    default:
+        return nil
+    }
+}
+
+private func mapVertexElementFormat(
+    componentType: Int32,
+    componentCount: Int32,
+    normalized: Bool
+) -> MTLVertexFormat? {
+    switch (componentType, componentCount, normalized) {
+    case (0x1406, 1, _):
+        return .float
+    case (0x1406, 2, _):
+        return .float2
+    case (0x1406, 3, _):
+        return .float3
+    case (0x1406, 4, _):
+        return .float4
+
+    case (0x1401, 2, false):
+        return .uchar2
+    case (0x1401, 3, false):
+        return .uchar3
+    case (0x1401, 4, false):
+        return .uchar4
+    case (0x1401, 2, true):
+        return .uchar2Normalized
+    case (0x1401, 3, true):
+        return .uchar3Normalized
+    case (0x1401, 4, true):
+        return .uchar4Normalized
+
+    case (0x1400, 2, false):
+        return .char2
+    case (0x1400, 3, false):
+        return .char3
+    case (0x1400, 4, false):
+        return .char4
+    case (0x1400, 2, true):
+        return .char2Normalized
+    case (0x1400, 3, true):
+        return .char3Normalized
+    case (0x1400, 4, true):
+        return .char4Normalized
+
+    case (0x1403, 2, false):
+        return .ushort2
+    case (0x1403, 3, false):
+        return .ushort3
+    case (0x1403, 4, false):
+        return .ushort4
+    case (0x1403, 2, true):
+        return .ushort2Normalized
+    case (0x1403, 3, true):
+        return .ushort3Normalized
+    case (0x1403, 4, true):
+        return .ushort4Normalized
+
+    case (0x1402, 2, false):
+        return .short2
+    case (0x1402, 3, false):
+        return .short3
+    case (0x1402, 4, false):
+        return .short4
+    case (0x1402, 2, true):
+        return .short2Normalized
+    case (0x1402, 3, true):
+        return .short3Normalized
+    case (0x1402, 4, true):
+        return .short4Normalized
+
+    case (0x1405, 1, _):
+        return .uint
+    case (0x1405, 2, _):
+        return .uint2
+    case (0x1405, 3, _):
+        return .uint3
+    case (0x1405, 4, _):
+        return .uint4
+
+    case (0x1404, 1, _):
+        return .int
+    case (0x1404, 2, _):
+        return .int2
+    case (0x1404, 3, _):
+        return .int3
+    case (0x1404, 4, _):
+        return .int4
     default:
         return nil
     }
@@ -1157,6 +1270,110 @@ public func mcmetal_swift_destroy_buffer(_ handle: Int64) -> Int32 {
             return kStatusInvalidArgument
         }
         return kStatusOk
+    }
+}
+
+private func parseVertexDescriptorElements(
+    attributeCount: Int32,
+    packedElements: UnsafePointer<Int32>,
+    packedIntCount: Int32
+) -> [NativeVertexDescriptorElement]? {
+    let elementCount = Int(attributeCount)
+    let expectedIntCount = elementCount * kPackedVertexDescriptorIntsPerAttribute
+    if elementCount <= 0 || packedIntCount < expectedIntCount {
+        return nil
+    }
+
+    var elements: [NativeVertexDescriptorElement] = []
+    elements.reserveCapacity(elementCount)
+    for i in 0..<elementCount {
+        let base = i * kPackedVertexDescriptorIntsPerAttribute
+        let usage = packedElements[base + 1]
+        if usage != kVertexUsagePosition
+            && usage != kVertexUsageNormal
+            && usage != kVertexUsageColor
+            && usage != kVertexUsageUV
+            && usage != kVertexUsageGeneric {
+            return nil
+        }
+
+        elements.append(
+            NativeVertexDescriptorElement(
+                attributeIndex: packedElements[base + 0],
+                usage: usage,
+                componentType: packedElements[base + 2],
+                componentCount: packedElements[base + 3],
+                offset: packedElements[base + 4],
+                normalized: packedElements[base + 5],
+                uvIndex: packedElements[base + 6]
+            )
+        )
+    }
+
+    return elements
+}
+
+@_cdecl("mcmetal_swift_register_vertex_descriptor")
+public func mcmetal_swift_register_vertex_descriptor(
+    _ strideBytes: Int32,
+    _ attributeCount: Int32,
+    _ packedElements: UnsafePointer<Int32>?,
+    _ packedIntCount: Int32
+) -> Int64 {
+    if strideBytes <= 0 || attributeCount <= 0 || packedIntCount <= 0 || packedElements == nil {
+        assertionFailure("Invalid vertex descriptor registration arguments.")
+        return 0
+    }
+
+    return withContextStateValue(0) { context in
+        guard let packedElements else {
+            return 0
+        }
+        guard let elements = parseVertexDescriptorElements(
+            attributeCount: attributeCount,
+            packedElements: packedElements,
+            packedIntCount: packedIntCount
+        ) else {
+            return 0
+        }
+
+        let descriptor = MTLVertexDescriptor()
+        for element in elements {
+            if element.attributeIndex < 0 {
+                return 0
+            }
+            let index = Int(element.attributeIndex)
+            guard let attributeDescriptor = descriptor.attributes[index] else {
+                return 0
+            }
+            guard let format = mapVertexElementFormat(
+                componentType: element.componentType,
+                componentCount: element.componentCount,
+                normalized: element.normalized != 0
+            ) else {
+                return 0
+            }
+
+            attributeDescriptor.format = format
+            attributeDescriptor.offset = Int(element.offset)
+            attributeDescriptor.bufferIndex = 0
+        }
+
+        guard let layoutDescriptor = descriptor.layouts[0] else {
+            return 0
+        }
+        layoutDescriptor.stride = Int(strideBytes)
+        layoutDescriptor.stepFunction = .perVertex
+        layoutDescriptor.stepRate = 1
+
+        let handle = context.nextVertexDescriptorHandle
+        context.nextVertexDescriptorHandle = handle &+ 1
+        context.nativeVertexDescriptors[handle] = NativeVertexDescriptorRecord(
+            stride: Int(strideBytes),
+            elements: elements,
+            descriptor: descriptor
+        )
+        return handle
     }
 }
 
