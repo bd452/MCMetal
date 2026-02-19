@@ -19,6 +19,7 @@ private final class MetalContextState {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
     let debugFlags: Int32
+    let renderStateTracker: RenderStateTracker
 
     var width: Int32
     var height: Int32
@@ -31,6 +32,7 @@ private final class MetalContextState {
         layer: CAMetalLayer,
         device: MTLDevice,
         commandQueue: MTLCommandQueue,
+        renderStateTracker: RenderStateTracker,
         width: Int32,
         height: Int32,
         scaleFactor: CGFloat,
@@ -42,6 +44,7 @@ private final class MetalContextState {
         self.layer = layer
         self.device = device
         self.commandQueue = commandQueue
+        self.renderStateTracker = renderStateTracker
         self.width = width
         self.height = height
         self.scaleFactor = scaleFactor
@@ -102,6 +105,16 @@ private func applyDebugLabels(_ context: MetalContextState) {
     context.commandQueue.label = "MCMetal Main Queue"
 }
 
+private func withContextState(_ body: (MetalContextState) -> Int32) -> Int32 {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+
+    guard let context = contextState else {
+        return kStatusInitializationFailed
+    }
+    return body(context)
+}
+
 @_cdecl("mcmetal_swift_initialize")
 public func mcmetal_swift_initialize(
     _ cocoaWindowHandle: Int64,
@@ -154,12 +167,23 @@ public func mcmetal_swift_initialize(
 
         let windowScaleFactor = window.backingScaleFactor > 0 ? window.backingScaleFactor : 1.0
 
+        let tracker = RenderStateTracker()
+        _ = tracker.setViewport(
+            x: 0,
+            y: 0,
+            width: clampDimension(width),
+            height: clampDimension(height),
+            minDepth: 0.0,
+            maxDepth: 1.0
+        )
+
         let state = MetalContextState(
             window: window,
             contentView: contentView,
             layer: layer,
             device: device,
             commandQueue: commandQueue,
+            renderStateTracker: tracker,
             width: clampDimension(width),
             height: clampDimension(height),
             scaleFactor: CGFloat(windowScaleFactor),
@@ -270,6 +294,146 @@ public func mcmetal_swift_render_demo_frame(
     }
 
     return renderStatus
+}
+
+@_cdecl("mcmetal_swift_set_blend_enabled")
+public func mcmetal_swift_set_blend_enabled(_ enabled: Int32) -> Int32 {
+    return withContextState { context in
+        _ = context.renderStateTracker.setBlendEnabled(enabled != 0)
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_blend_func")
+public func mcmetal_swift_set_blend_func(
+    _ srcRGB: Int32,
+    _ dstRGB: Int32,
+    _ srcAlpha: Int32,
+    _ dstAlpha: Int32
+) -> Int32 {
+    return withContextState { context in
+        _ = context.renderStateTracker.setBlendFunc(
+            srcRGB: srcRGB,
+            dstRGB: dstRGB,
+            srcAlpha: srcAlpha,
+            dstAlpha: dstAlpha
+        )
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_blend_equation")
+public func mcmetal_swift_set_blend_equation(
+    _ rgbEquation: Int32,
+    _ alphaEquation: Int32
+) -> Int32 {
+    return withContextState { context in
+        _ = context.renderStateTracker.setBlendEquation(rgb: rgbEquation, alpha: alphaEquation)
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_depth_state")
+public func mcmetal_swift_set_depth_state(
+    _ depthTestEnabled: Int32,
+    _ depthWriteEnabled: Int32,
+    _ depthCompareFunction: Int32
+) -> Int32 {
+    return withContextState { context in
+        _ = context.renderStateTracker.setDepthState(
+            testEnabled: depthTestEnabled != 0,
+            writeEnabled: depthWriteEnabled != 0,
+            compareFunction: depthCompareFunction
+        )
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_stencil_state")
+public func mcmetal_swift_set_stencil_state(
+    _ stencilEnabled: Int32,
+    _ stencilFunction: Int32,
+    _ stencilReference: Int32,
+    _ stencilCompareMask: Int32,
+    _ stencilWriteMask: Int32,
+    _ stencilSFail: Int32,
+    _ stencilDpFail: Int32,
+    _ stencilDpPass: Int32
+) -> Int32 {
+    return withContextState { context in
+        _ = context.renderStateTracker.setStencilState(
+            enabled: stencilEnabled != 0,
+            function: stencilFunction,
+            reference: stencilReference,
+            compareMask: stencilCompareMask,
+            writeMask: stencilWriteMask,
+            sfail: stencilSFail,
+            dpfail: stencilDpFail,
+            dppass: stencilDpPass
+        )
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_cull_state")
+public func mcmetal_swift_set_cull_state(
+    _ cullEnabled: Int32,
+    _ cullMode: Int32
+) -> Int32 {
+    return withContextState { context in
+        _ = context.renderStateTracker.setCullState(enabled: cullEnabled != 0, mode: cullMode)
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_scissor_state")
+public func mcmetal_swift_set_scissor_state(
+    _ scissorEnabled: Int32,
+    _ x: Int32,
+    _ y: Int32,
+    _ width: Int32,
+    _ height: Int32
+) -> Int32 {
+    if scissorEnabled != 0 && (width <= 0 || height <= 0) {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        _ = context.renderStateTracker.setScissor(
+            enabled: scissorEnabled != 0,
+            x: x,
+            y: y,
+            width: width,
+            height: height
+        )
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_set_viewport_state")
+public func mcmetal_swift_set_viewport_state(
+    _ x: Int32,
+    _ y: Int32,
+    _ width: Int32,
+    _ height: Int32,
+    _ minDepth: Float,
+    _ maxDepth: Float
+) -> Int32 {
+    if width <= 0 || height <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        _ = context.renderStateTracker.setViewport(
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            minDepth: minDepth,
+            maxDepth: maxDepth
+        )
+        return kStatusOk
+    }
 }
 
 @_cdecl("mcmetal_swift_shutdown")

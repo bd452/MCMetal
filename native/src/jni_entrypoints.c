@@ -57,6 +57,131 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRende
       (float)alpha);
 }
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetBlendEnabled(
+    JNIEnv *env,
+    jclass clazz,
+    jboolean enabled) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_blend_enabled(enabled == JNI_TRUE ? 1 : 0);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetBlendFunc(
+    JNIEnv *env,
+    jclass clazz,
+    jint src_rgb,
+    jint dst_rgb,
+    jint src_alpha,
+    jint dst_alpha) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_blend_func(
+      (int32_t)src_rgb,
+      (int32_t)dst_rgb,
+      (int32_t)src_alpha,
+      (int32_t)dst_alpha);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetBlendEquation(
+    JNIEnv *env,
+    jclass clazz,
+    jint rgb_equation,
+    jint alpha_equation) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_blend_equation(
+      (int32_t)rgb_equation,
+      (int32_t)alpha_equation);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetDepthState(
+    JNIEnv *env,
+    jclass clazz,
+    jboolean depth_test_enabled,
+    jboolean depth_write_enabled,
+    jint depth_compare_function) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_depth_state(
+      depth_test_enabled == JNI_TRUE ? 1 : 0,
+      depth_write_enabled == JNI_TRUE ? 1 : 0,
+      (int32_t)depth_compare_function);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetStencilState(
+    JNIEnv *env,
+    jclass clazz,
+    jboolean stencil_enabled,
+    jint stencil_function,
+    jint stencil_reference,
+    jint stencil_compare_mask,
+    jint stencil_write_mask,
+    jint stencil_sfail,
+    jint stencil_dpfail,
+    jint stencil_dppass) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_stencil_state(
+      stencil_enabled == JNI_TRUE ? 1 : 0,
+      (int32_t)stencil_function,
+      (int32_t)stencil_reference,
+      (int32_t)stencil_compare_mask,
+      (int32_t)stencil_write_mask,
+      (int32_t)stencil_sfail,
+      (int32_t)stencil_dpfail,
+      (int32_t)stencil_dppass);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetCullState(
+    JNIEnv *env,
+    jclass clazz,
+    jboolean cull_enabled,
+    jint cull_mode) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_cull_state(
+      cull_enabled == JNI_TRUE ? 1 : 0,
+      (int32_t)cull_mode);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetScissorState(
+    JNIEnv *env,
+    jclass clazz,
+    jboolean scissor_enabled,
+    jint x,
+    jint y,
+    jint width,
+    jint height) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_scissor_state(
+      scissor_enabled == JNI_TRUE ? 1 : 0,
+      (int32_t)x,
+      (int32_t)y,
+      (int32_t)width,
+      (int32_t)height);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeSetViewportState(
+    JNIEnv *env,
+    jclass clazz,
+    jint x,
+    jint y,
+    jint width,
+    jint height,
+    jfloat min_depth,
+    jfloat max_depth) {
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_set_viewport_state(
+      (int32_t)x,
+      (int32_t)y,
+      (int32_t)width,
+      (int32_t)height,
+      (float)min_depth,
+      (float)max_depth);
+}
+
 JNIEXPORT void JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeShutdown(
     JNIEnv *env,
     jclass clazz) {

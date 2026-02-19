@@ -1,6 +1,11 @@
 package io.github.mcmetal.metal;
 
 import io.github.mcmetal.metal.bridge.HostPlatform;
+import io.github.mcmetal.metal.bridge.NativeApi;
+import io.github.mcmetal.metal.bridge.NativeBridgeException;
+import io.github.mcmetal.metal.bridge.NativeStatus;
+
+import java.util.function.IntSupplier;
 
 /**
  * Thin Java-side bridge used by RenderSystem mixins.
@@ -50,140 +55,282 @@ public final class MetalRenderSystemBridge {
         if (!isBridgeActive()) {
             return;
         }
+        if (blendEnabled) {
+            return;
+        }
         blendEnabled = true;
+        submitState("nativeSetBlendEnabled", () -> NativeApi.nativeSetBlendEnabled(blendEnabled));
     }
 
     public static void onDisableBlend() {
         if (!isBridgeActive()) {
             return;
         }
+        if (!blendEnabled) {
+            return;
+        }
         blendEnabled = false;
+        submitState("nativeSetBlendEnabled", () -> NativeApi.nativeSetBlendEnabled(blendEnabled));
     }
 
     public static void onBlendFunc(int srcFactor, int dstFactor) {
         if (!isBridgeActive()) {
             return;
         }
+        if (blendSrcRgb == srcFactor && blendDstRgb == dstFactor
+            && blendSrcAlpha == srcFactor && blendDstAlpha == dstFactor) {
+            return;
+        }
         blendSrcRgb = srcFactor;
         blendDstRgb = dstFactor;
         blendSrcAlpha = srcFactor;
         blendDstAlpha = dstFactor;
+        submitState(
+            "nativeSetBlendFunc",
+            () -> NativeApi.nativeSetBlendFunc(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha)
+        );
     }
 
     public static void onBlendFuncSeparate(int srcRgb, int dstRgb, int srcAlpha, int dstAlpha) {
         if (!isBridgeActive()) {
             return;
         }
+        if (blendSrcRgb == srcRgb && blendDstRgb == dstRgb
+            && blendSrcAlpha == srcAlpha && blendDstAlpha == dstAlpha) {
+            return;
+        }
         blendSrcRgb = srcRgb;
         blendDstRgb = dstRgb;
         blendSrcAlpha = srcAlpha;
         blendDstAlpha = dstAlpha;
+        submitState(
+            "nativeSetBlendFunc",
+            () -> NativeApi.nativeSetBlendFunc(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha)
+        );
     }
 
     public static void onBlendEquation(int mode) {
         if (!isBridgeActive()) {
             return;
         }
+        if (blendEquationRgb == mode && blendEquationAlpha == mode) {
+            return;
+        }
         blendEquationRgb = mode;
         blendEquationAlpha = mode;
+        submitState(
+            "nativeSetBlendEquation",
+            () -> NativeApi.nativeSetBlendEquation(blendEquationRgb, blendEquationAlpha)
+        );
     }
 
     public static void onEnableDepthTest() {
         if (!isBridgeActive()) {
             return;
         }
+        if (depthTestEnabled) {
+            return;
+        }
         depthTestEnabled = true;
+        submitState(
+            "nativeSetDepthState",
+            () -> NativeApi.nativeSetDepthState(depthTestEnabled, depthWriteMask, depthCompareFunction)
+        );
     }
 
     public static void onDisableDepthTest() {
         if (!isBridgeActive()) {
             return;
         }
+        if (!depthTestEnabled) {
+            return;
+        }
         depthTestEnabled = false;
+        submitState(
+            "nativeSetDepthState",
+            () -> NativeApi.nativeSetDepthState(depthTestEnabled, depthWriteMask, depthCompareFunction)
+        );
     }
 
     public static void onDepthFunc(int function) {
         if (!isBridgeActive()) {
             return;
         }
+        if (depthCompareFunction == function) {
+            return;
+        }
         depthCompareFunction = function;
+        submitState(
+            "nativeSetDepthState",
+            () -> NativeApi.nativeSetDepthState(depthTestEnabled, depthWriteMask, depthCompareFunction)
+        );
     }
 
     public static void onDepthMask(boolean mask) {
         if (!isBridgeActive()) {
             return;
         }
+        if (depthWriteMask == mask) {
+            return;
+        }
         depthWriteMask = mask;
+        submitState(
+            "nativeSetDepthState",
+            () -> NativeApi.nativeSetDepthState(depthTestEnabled, depthWriteMask, depthCompareFunction)
+        );
     }
 
     public static void onEnableCull() {
         if (!isBridgeActive()) {
             return;
         }
+        if (cullEnabled) {
+            return;
+        }
         cullEnabled = true;
+        submitState("nativeSetCullState", () -> NativeApi.nativeSetCullState(cullEnabled, cullMode));
     }
 
     public static void onDisableCull() {
         if (!isBridgeActive()) {
             return;
         }
+        if (!cullEnabled) {
+            return;
+        }
         cullEnabled = false;
+        submitState("nativeSetCullState", () -> NativeApi.nativeSetCullState(cullEnabled, cullMode));
     }
 
     public static void onEnableScissor(int x, int y, int width, int height) {
         if (!isBridgeActive()) {
             return;
         }
+        int clampedWidth = Math.max(width, 1);
+        int clampedHeight = Math.max(height, 1);
+        if (scissorEnabled && scissorX == x && scissorY == y
+            && scissorWidth == clampedWidth && scissorHeight == clampedHeight) {
+            return;
+        }
         scissorEnabled = true;
         scissorX = x;
         scissorY = y;
-        scissorWidth = Math.max(width, 1);
-        scissorHeight = Math.max(height, 1);
+        scissorWidth = clampedWidth;
+        scissorHeight = clampedHeight;
+        submitState(
+            "nativeSetScissorState",
+            () -> NativeApi.nativeSetScissorState(scissorEnabled, scissorX, scissorY, scissorWidth, scissorHeight)
+        );
     }
 
     public static void onDisableScissor() {
         if (!isBridgeActive()) {
             return;
         }
+        if (!scissorEnabled) {
+            return;
+        }
         scissorEnabled = false;
+        submitState(
+            "nativeSetScissorState",
+            () -> NativeApi.nativeSetScissorState(scissorEnabled, scissorX, scissorY, scissorWidth, scissorHeight)
+        );
     }
 
     public static void onViewport(int x, int y, int width, int height) {
         if (!isBridgeActive()) {
             return;
         }
+        int clampedWidth = Math.max(width, 1);
+        int clampedHeight = Math.max(height, 1);
+        if (viewportX == x && viewportY == y && viewportWidth == clampedWidth && viewportHeight == clampedHeight) {
+            return;
+        }
         viewportX = x;
         viewportY = y;
-        viewportWidth = Math.max(width, 1);
-        viewportHeight = Math.max(height, 1);
+        viewportWidth = clampedWidth;
+        viewportHeight = clampedHeight;
+        submitState(
+            "nativeSetViewportState",
+            () -> NativeApi.nativeSetViewportState(viewportX, viewportY, viewportWidth, viewportHeight, 0.0F, 1.0F)
+        );
     }
 
     public static void onStencilFunc(int function, int reference, int mask) {
         if (!isBridgeActive()) {
             return;
         }
+        if (stencilEnabled && stencilFunction == function
+            && stencilReference == reference && stencilCompareMask == mask) {
+            return;
+        }
         stencilEnabled = true;
         stencilFunction = function;
         stencilReference = reference;
         stencilCompareMask = mask;
+        submitState(
+            "nativeSetStencilState",
+            () -> NativeApi.nativeSetStencilState(
+                stencilEnabled,
+                stencilFunction,
+                stencilReference,
+                stencilCompareMask,
+                stencilWriteMask,
+                stencilSFail,
+                stencilDpFail,
+                stencilDpPass
+            )
+        );
     }
 
     public static void onStencilMask(int mask) {
         if (!isBridgeActive()) {
             return;
         }
+        if (stencilEnabled && stencilWriteMask == mask) {
+            return;
+        }
         stencilEnabled = true;
         stencilWriteMask = mask;
+        submitState(
+            "nativeSetStencilState",
+            () -> NativeApi.nativeSetStencilState(
+                stencilEnabled,
+                stencilFunction,
+                stencilReference,
+                stencilCompareMask,
+                stencilWriteMask,
+                stencilSFail,
+                stencilDpFail,
+                stencilDpPass
+            )
+        );
     }
 
     public static void onStencilOp(int sfail, int dpfail, int dppass) {
         if (!isBridgeActive()) {
             return;
         }
+        if (stencilEnabled && stencilSFail == sfail && stencilDpFail == dpfail && stencilDpPass == dppass) {
+            return;
+        }
         stencilEnabled = true;
         stencilSFail = sfail;
         stencilDpFail = dpfail;
         stencilDpPass = dppass;
+        submitState(
+            "nativeSetStencilState",
+            () -> NativeApi.nativeSetStencilState(
+                stencilEnabled,
+                stencilFunction,
+                stencilReference,
+                stencilCompareMask,
+                stencilWriteMask,
+                stencilSFail,
+                stencilDpFail,
+                stencilDpPass
+            )
+        );
     }
 
     public static void onDrawElements(int mode, int count, int indexType) {
@@ -195,5 +342,16 @@ public final class MetalRenderSystemBridge {
 
     private static boolean isBridgeActive() {
         return HostPlatform.isMacOs() && MetalPhaseOneBridge.isInitialized();
+    }
+
+    private static void submitState(String operation, IntSupplier nativeCall) {
+        int statusCode = nativeCall.getAsInt();
+        if (NativeStatus.isSuccess(statusCode)) {
+            return;
+        }
+        throw new NativeBridgeException(
+            "Native operation " + operation + " failed with status "
+                + NativeStatus.describe(statusCode) + " (" + statusCode + ")."
+        );
     }
 }
