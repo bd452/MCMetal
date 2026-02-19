@@ -38,6 +38,12 @@ fragment float4 mcmetal_fragment_main() {
 }
 """
 
+private struct NativeBufferRecord {
+    var usage: Int32
+    var size: Int
+    var bytes: Data
+}
+
 private final class MetalContextState {
     let window: NSWindow
     let contentView: NSView
@@ -56,6 +62,8 @@ private final class MetalContextState {
     var fullscreen: Bool
     var pipelineCache: [PipelineKey: MTLRenderPipelineState] = [:]
     var depthStencilCache: [DepthStencilKey: MTLDepthStencilState] = [:]
+    var nextBufferHandle: Int64 = 1
+    var nativeBuffers: [Int64: NativeBufferRecord] = [:]
 
     init(
         window: NSWindow,
@@ -148,6 +156,19 @@ private func withContextState(_ body: (MetalContextState) -> Int32) -> Int32 {
 
     guard let context = contextState else {
         return kStatusInitializationFailed
+    }
+    return body(context)
+}
+
+private func withContextStateValue<T>(
+    _ fallback: T,
+    _ body: (MetalContextState) -> T
+) -> T {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+
+    guard let context = contextState else {
+        return fallback
     }
     return body(context)
 }
@@ -896,6 +917,118 @@ public func mcmetal_swift_draw_indexed(
     }
 
     return drawStatus
+}
+
+private func makeBufferData(
+    size: Int32,
+    initialData: UnsafeRawPointer?,
+    initialDataLength: Int32
+) -> Data? {
+    if size <= 0 || initialDataLength < 0 || initialDataLength > size {
+        return nil
+    }
+    if initialDataLength > 0 && initialData == nil {
+        return nil
+    }
+
+    var bytes = Data(count: Int(size))
+    if let initialData, initialDataLength > 0 {
+        bytes.withUnsafeMutableBytes { rawBuffer in
+            guard let destination = rawBuffer.baseAddress else {
+                return
+            }
+            destination.copyMemory(from: initialData, byteCount: Int(initialDataLength))
+        }
+    }
+    return bytes
+}
+
+@_cdecl("mcmetal_swift_create_buffer")
+public func mcmetal_swift_create_buffer(
+    _ usage: Int32,
+    _ size: Int32,
+    _ initialData: UnsafeRawPointer?,
+    _ initialDataLength: Int32
+) -> Int64 {
+    if size <= 0 {
+        assertionFailure("Buffer size must be positive.")
+        return 0
+    }
+
+    return withContextStateValue(0) { context in
+        guard let bytes = makeBufferData(
+            size: size,
+            initialData: initialData,
+            initialDataLength: initialDataLength
+        ) else {
+            return 0
+        }
+
+        let handle = context.nextBufferHandle
+        context.nextBufferHandle = handle &+ 1
+        context.nativeBuffers[handle] = NativeBufferRecord(
+            usage: usage,
+            size: Int(size),
+            bytes: bytes
+        )
+        return handle
+    }
+}
+
+@_cdecl("mcmetal_swift_update_buffer")
+public func mcmetal_swift_update_buffer(
+    _ handle: Int64,
+    _ offset: Int32,
+    _ data: UnsafeRawPointer?,
+    _ dataLength: Int32
+) -> Int32 {
+    if handle <= 0 || offset < 0 || dataLength < 0 {
+        assertionFailure("Invalid buffer update arguments.")
+        return kStatusInvalidArgument
+    }
+    if dataLength > 0 && data == nil {
+        assertionFailure("Expected non-null update data for non-empty update.")
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard var record = context.nativeBuffers[handle] else {
+            return kStatusInvalidArgument
+        }
+
+        let updateOffset = Int(offset)
+        let updateLength = Int(dataLength)
+        if updateOffset + updateLength > record.size {
+            assertionFailure("Buffer update range exceeds buffer size.")
+            return kStatusInvalidArgument
+        }
+
+        if let data, updateLength > 0 {
+            record.bytes.withUnsafeMutableBytes { rawBuffer in
+                guard let destinationBase = rawBuffer.baseAddress?.advanced(by: updateOffset) else {
+                    return
+                }
+                destinationBase.copyMemory(from: data, byteCount: updateLength)
+            }
+        }
+
+        context.nativeBuffers[handle] = record
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_destroy_buffer")
+public func mcmetal_swift_destroy_buffer(_ handle: Int64) -> Int32 {
+    if handle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard context.nativeBuffers.removeValue(forKey: handle) != nil else {
+            return kStatusInvalidArgument
+        }
+        return kStatusOk
+    }
 }
 
 @_cdecl("mcmetal_swift_shutdown")

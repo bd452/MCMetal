@@ -76,6 +76,21 @@ int32_t mcmetal_swift_draw_indexed(
     int32_t count,
     int32_t index_type);
 
+int64_t mcmetal_swift_create_buffer(
+    int32_t usage,
+    int32_t size,
+    const void *initial_data,
+    int32_t initial_data_length);
+
+int32_t mcmetal_swift_update_buffer(
+    int64_t handle,
+    int32_t offset,
+    const void *data,
+    int32_t data_length);
+
+int32_t mcmetal_swift_destroy_buffer(
+    int64_t handle);
+
 void mcmetal_swift_shutdown(void);
 
 #ifdef __cplusplus
