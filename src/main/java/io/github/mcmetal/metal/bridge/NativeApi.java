@@ -54,6 +54,30 @@ public final class NativeApi {
 
     public static native int nativeDestroyBuffer(long handle);
 
+    public static native long nativeCreateTexture(
+        int pixelFormat,
+        int width,
+        int height,
+        int mipLevels,
+        int usageFlags,
+        ByteBuffer initialData,
+        int initialDataLength
+    );
+
+    public static native int nativeUpdateTexture(
+        long handle,
+        int mipLevel,
+        int x,
+        int y,
+        int width,
+        int height,
+        ByteBuffer data,
+        int dataLength,
+        int rowStrideBytes
+    );
+
+    public static native int nativeDestroyTexture(long handle);
+
     public static native long nativeRegisterVertexDescriptor(
         int strideBytes,
         int attributeCount,

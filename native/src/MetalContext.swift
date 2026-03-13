@@ -22,6 +22,18 @@ private let kVertexUsageNormal: Int32 = 1
 private let kVertexUsageColor: Int32 = 2
 private let kVertexUsageUV: Int32 = 3
 private let kVertexUsageGeneric: Int32 = 4
+private let kTextureUsageSampled: Int32 = 1 << 0
+private let kTextureUsageRenderTarget: Int32 = 1 << 1
+private let kTextureUsageShaderWrite: Int32 = 1 << 2
+private let kNativeTextureFormatR8Unorm: Int32 = 1
+private let kNativeTextureFormatRG8Unorm: Int32 = 2
+private let kNativeTextureFormatRGBA8Unorm: Int32 = 3
+private let kNativeTextureFormatBGRA8Unorm: Int32 = 4
+private let kNativeTextureFormatBGRA8UnormSrgb: Int32 = 5
+private let kNativeTextureFormatRGBA16Float: Int32 = 6
+private let kNativeTextureFormatRGBA32Float: Int32 = 7
+private let kNativeTextureFormatDepth24Stencil8: Int32 = 8
+private let kNativeTextureFormatDepth32FloatStencil8: Int32 = 9
 private let kDemoVertexFunctionName = "mcmetal_vertex_main"
 private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
 private let kDemoShaderSource = """
@@ -56,6 +68,14 @@ private struct NativeBufferRecord {
     var slotCount: Int
     var lastWriteOffset: Int
     let metalBuffer: MTLBuffer
+}
+
+private struct NativeTextureRecord {
+    var width: Int
+    var height: Int
+    var mipLevels: Int
+    var bytesPerPixel: Int
+    let metalTexture: MTLTexture
 }
 
 private struct NativeVertexDescriptorElement {
@@ -111,6 +131,8 @@ private final class MetalContextState {
     var depthStencilCache: [DepthStencilKey: MTLDepthStencilState] = [:]
     var nextBufferHandle: Int64 = 1
     var nativeBuffers: [Int64: NativeBufferRecord] = [:]
+    var nextTextureHandle: Int64 = 1
+    var nativeTextures: [Int64: NativeTextureRecord] = [:]
     var nextVertexDescriptorHandle: Int64 = 1
     var nativeVertexDescriptors: [Int64: NativeVertexDescriptorRecord] = [:]
     var nextShaderProgramHandle: Int64 = 1
@@ -574,6 +596,35 @@ private func mapVertexElementFormat(
     default:
         return nil
     }
+}
+
+private func mapNativeTextureFormat(_ pixelFormat: Int32) -> (format: MTLPixelFormat, bytesPerPixel: Int)? {
+    switch pixelFormat {
+    case kNativeTextureFormatR8Unorm:
+        return (.r8Unorm, 1)
+    case kNativeTextureFormatRG8Unorm:
+        return (.rg8Unorm, 2)
+    case kNativeTextureFormatRGBA8Unorm:
+        return (.rgba8Unorm, 4)
+    case kNativeTextureFormatBGRA8Unorm:
+        return (.bgra8Unorm, 4)
+    case kNativeTextureFormatBGRA8UnormSrgb:
+        return (.bgra8Unorm_srgb, 4)
+    case kNativeTextureFormatRGBA16Float:
+        return (.rgba16Float, 8)
+    case kNativeTextureFormatRGBA32Float:
+        return (.rgba32Float, 16)
+    case kNativeTextureFormatDepth24Stencil8:
+        return (.depth24Unorm_stencil8, 4)
+    case kNativeTextureFormatDepth32FloatStencil8:
+        return (.depth32Float_stencil8, 8)
+    default:
+        return nil
+    }
+}
+
+private func textureLevelDimension(_ base: Int, level: Int) -> Int {
+    return max(1, base >> max(level, 0))
 }
 
 private func createPipelineState(context: MetalContextState, key: PipelineKey)
@@ -1436,6 +1487,170 @@ public func mcmetal_swift_destroy_buffer(_ handle: Int64) -> Int32 {
 
     return withContextState { context in
         guard context.nativeBuffers.removeValue(forKey: handle) != nil else {
+            return kStatusInvalidArgument
+        }
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_create_texture")
+public func mcmetal_swift_create_texture(
+    _ pixelFormat: Int32,
+    _ width: Int32,
+    _ height: Int32,
+    _ mipLevels: Int32,
+    _ usageFlags: Int32,
+    _ initialData: UnsafeRawPointer?,
+    _ initialDataLength: Int32
+) -> Int64 {
+    if width <= 0 || height <= 0 || mipLevels <= 0 || initialDataLength < 0 {
+        assertionFailure("Texture dimensions/mipmap level count must be valid.")
+        return 0
+    }
+    if initialDataLength > 0 && initialData == nil {
+        assertionFailure("Expected non-null texture initial data for non-empty upload.")
+        return 0
+    }
+    let supportedUsageBits = kTextureUsageSampled | kTextureUsageRenderTarget | kTextureUsageShaderWrite
+    if (usageFlags & ~supportedUsageBits) != 0 {
+        assertionFailure("Texture usage flags contain unsupported bits.")
+        return 0
+    }
+
+    return withContextStateValue(0) { context in
+        guard let mappedFormat = mapNativeTextureFormat(pixelFormat) else {
+            return 0
+        }
+
+        let widthValue = Int(width)
+        let heightValue = Int(height)
+        let mipLevelCount = Int(mipLevels)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: mappedFormat.format,
+            width: widthValue,
+            height: heightValue,
+            mipmapped: mipLevelCount > 1
+        )
+        descriptor.mipmapLevelCount = mipLevelCount
+
+        var usage: MTLTextureUsage = []
+        if (usageFlags & kTextureUsageSampled) != 0 {
+            usage.insert(.shaderRead)
+        }
+        if (usageFlags & kTextureUsageRenderTarget) != 0 {
+            usage.insert(.renderTarget)
+        }
+        if (usageFlags & kTextureUsageShaderWrite) != 0 {
+            usage.insert(.shaderWrite)
+        }
+        if usage.isEmpty {
+            usage.insert(.shaderRead)
+        }
+        descriptor.usage = usage
+        descriptor.storageMode = .shared
+
+        guard let texture = context.device.makeTexture(descriptor: descriptor) else {
+            return 0
+        }
+
+        if let initialData, initialDataLength > 0 {
+            let requiredByteCount = widthValue * heightValue * mappedFormat.bytesPerPixel
+            if Int(initialDataLength) < requiredByteCount {
+                return 0
+            }
+            texture.replace(
+                region: MTLRegionMake2D(0, 0, widthValue, heightValue),
+                mipmapLevel: 0,
+                withBytes: initialData,
+                bytesPerRow: widthValue * mappedFormat.bytesPerPixel
+            )
+        }
+
+        if (context.debugFlags & kDebugFlagLabels) != 0 {
+            texture.label = "MCMetal Texture \(context.nextTextureHandle)"
+        }
+
+        let handle = context.nextTextureHandle
+        context.nextTextureHandle = handle &+ 1
+        context.nativeTextures[handle] = NativeTextureRecord(
+            width: widthValue,
+            height: heightValue,
+            mipLevels: mipLevelCount,
+            bytesPerPixel: mappedFormat.bytesPerPixel,
+            metalTexture: texture
+        )
+        return handle
+    }
+}
+
+@_cdecl("mcmetal_swift_update_texture")
+public func mcmetal_swift_update_texture(
+    _ handle: Int64,
+    _ mipLevel: Int32,
+    _ x: Int32,
+    _ y: Int32,
+    _ width: Int32,
+    _ height: Int32,
+    _ data: UnsafeRawPointer?,
+    _ dataLength: Int32,
+    _ rowStrideBytes: Int32
+) -> Int32 {
+    if handle <= 0 || mipLevel < 0 || x < 0 || y < 0 || width <= 0 || height <= 0
+        || dataLength < 0 || rowStrideBytes <= 0
+    {
+        assertionFailure("Texture update arguments must be valid.")
+        return kStatusInvalidArgument
+    }
+    if dataLength > 0 && data == nil {
+        assertionFailure("Expected non-null texture update data for non-empty update.")
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard let record = context.nativeTextures[handle] else {
+            return kStatusInvalidArgument
+        }
+        let mipLevelValue = Int(mipLevel)
+        if mipLevelValue >= record.mipLevels {
+            return kStatusInvalidArgument
+        }
+
+        let levelWidth = textureLevelDimension(record.width, level: mipLevelValue)
+        let levelHeight = textureLevelDimension(record.height, level: mipLevelValue)
+        if Int(x) + Int(width) > levelWidth || Int(y) + Int(height) > levelHeight {
+            return kStatusInvalidArgument
+        }
+
+        let minimumRowStride = Int(width) * record.bytesPerPixel
+        if Int(rowStrideBytes) < minimumRowStride {
+            return kStatusInvalidArgument
+        }
+        let requiredBytes = Int(rowStrideBytes) * Int(height)
+        if Int(dataLength) < requiredBytes {
+            return kStatusInvalidArgument
+        }
+        guard let data else {
+            return kStatusInvalidArgument
+        }
+
+        record.metalTexture.replace(
+            region: MTLRegionMake2D(Int(x), Int(y), Int(width), Int(height)),
+            mipmapLevel: mipLevelValue,
+            withBytes: data,
+            bytesPerRow: Int(rowStrideBytes)
+        )
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_destroy_texture")
+public func mcmetal_swift_destroy_texture(_ handle: Int64) -> Int32 {
+    if handle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard context.nativeTextures.removeValue(forKey: handle) != nil else {
             return kStatusInvalidArgument
         }
         return kStatusOk
