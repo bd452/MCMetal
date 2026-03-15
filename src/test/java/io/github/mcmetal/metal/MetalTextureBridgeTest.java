@@ -129,6 +129,59 @@ class MetalTextureBridgeTest {
         assertEquals(1, backend.destroyCalls);
     }
 
+    @Test
+    void configureTextureSamplerNormalizesAndCachesEquivalentDescriptors() {
+        long handle = MetalTextureBridge.createTexture(
+            MetalTextureFormatMapper.GL_RGBA8,
+            MetalTextureFormatMapper.GL_RGBA,
+            MetalTextureFormatMapper.GL_UNSIGNED_BYTE,
+            16,
+            16,
+            false,
+            false,
+            null
+        );
+
+        MetalTextureBridge.configureTextureSampler(
+            handle,
+            MetalTextureBridge.GL_LINEAR_MIPMAP_LINEAR,
+            MetalTextureBridge.GL_LINEAR,
+            MetalTextureBridge.GL_CLAMP,
+            MetalTextureBridge.GL_CLAMP_TO_EDGE,
+            64
+        );
+        MetalTextureBridge.configureTextureSampler(
+            handle,
+            MetalTextureBridge.GL_LINEAR,
+            MetalTextureBridge.GL_LINEAR,
+            MetalTextureBridge.GL_CLAMP_TO_EDGE,
+            MetalTextureBridge.GL_CLAMP_TO_EDGE,
+            16
+        );
+
+        assertEquals(1, backend.configureCalls);
+        assertEquals(MetalTextureBridge.GL_LINEAR, backend.lastSamplerMinFilter);
+        assertEquals(MetalTextureBridge.GL_LINEAR, backend.lastSamplerMagFilter);
+        assertEquals(MetalTextureBridge.GL_CLAMP_TO_EDGE, backend.lastSamplerWrapU);
+        assertEquals(MetalTextureBridge.GL_CLAMP_TO_EDGE, backend.lastSamplerWrapV);
+        assertEquals(16, backend.lastSamplerMaxAnisotropy);
+    }
+
+    @Test
+    void configureTextureSamplerRejectsUnknownHandle() {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> MetalTextureBridge.configureTextureSampler(
+                999L,
+                MetalTextureBridge.GL_NEAREST,
+                MetalTextureBridge.GL_NEAREST,
+                MetalTextureBridge.GL_REPEAT,
+                MetalTextureBridge.GL_REPEAT,
+                1
+            )
+        );
+    }
+
     private static ByteBuffer buffer(int size) {
         ByteBuffer buffer = ByteBuffer.allocateDirect(size);
         for (int i = 0; i < size; i++) {
@@ -148,6 +201,12 @@ class MetalTextureBridgeTest {
         private int lastCreateUsageFlags;
         private int lastCreateDataLength;
         private int lastUpdateRowStrideBytes;
+        private int configureCalls;
+        private int lastSamplerMinFilter;
+        private int lastSamplerMagFilter;
+        private int lastSamplerWrapU;
+        private int lastSamplerWrapV;
+        private int lastSamplerMaxAnisotropy;
 
         @Override
         public long createTexture(
@@ -187,6 +246,24 @@ class MetalTextureBridgeTest {
         @Override
         public int destroyTexture(long handle) {
             destroyCalls++;
+            return NativeStatus.OK;
+        }
+
+        @Override
+        public int configureTextureSampler(
+            long textureHandle,
+            int minFilter,
+            int magFilter,
+            int wrapU,
+            int wrapV,
+            int maxAnisotropy
+        ) {
+            configureCalls++;
+            lastSamplerMinFilter = minFilter;
+            lastSamplerMagFilter = magFilter;
+            lastSamplerWrapU = wrapU;
+            lastSamplerWrapV = wrapV;
+            lastSamplerMaxAnisotropy = maxAnisotropy;
             return NativeStatus.OK;
         }
     }

@@ -34,6 +34,20 @@ private let kNativeTextureFormatRGBA16Float: Int32 = 6
 private let kNativeTextureFormatRGBA32Float: Int32 = 7
 private let kNativeTextureFormatDepth24Stencil8: Int32 = 8
 private let kNativeTextureFormatDepth32FloatStencil8: Int32 = 9
+private let kGlNearest: Int32 = 0x2600
+private let kGlLinear: Int32 = 0x2601
+private let kGlNearestMipmapNearest: Int32 = 0x2700
+private let kGlLinearMipmapNearest: Int32 = 0x2701
+private let kGlNearestMipmapLinear: Int32 = 0x2702
+private let kGlLinearMipmapLinear: Int32 = 0x2703
+private let kGlRepeat: Int32 = 0x2901
+private let kGlClamp: Int32 = 0x2900
+private let kGlClampToEdge: Int32 = 0x812F
+private let kGlMirroredRepeat: Int32 = 0x8370
+private let kMaxSamplerAnisotropy: Int32 = 16
+private let kSamplerMipFilterNotMipmapped: Int32 = 0
+private let kSamplerMipFilterNearest: Int32 = 1
+private let kSamplerMipFilterLinear: Int32 = 2
 private let kDemoVertexFunctionName = "mcmetal_vertex_main"
 private let kDemoFragmentFunctionName = "mcmetal_fragment_main"
 private let kDemoShaderSource = """
@@ -76,6 +90,25 @@ private struct NativeTextureRecord {
     var mipLevels: Int
     var bytesPerPixel: Int
     let metalTexture: MTLTexture
+    var samplerState: MTLSamplerState?
+}
+
+private struct NativeSamplerDescriptorKey: Hashable {
+    var minFilter: Int32
+    var magFilter: Int32
+    var mipFilter: Int32
+    var wrapU: Int32
+    var wrapV: Int32
+    var maxAnisotropy: Int32
+}
+
+private struct ResolvedSamplerDescriptor {
+    var key: NativeSamplerDescriptorKey
+    var minFilter: MTLSamplerMinMagFilter
+    var magFilter: MTLSamplerMinMagFilter
+    var mipFilter: MTLSamplerMipFilter
+    var addressU: MTLSamplerAddressMode
+    var addressV: MTLSamplerAddressMode
 }
 
 private struct NativeVertexDescriptorElement {
@@ -133,6 +166,7 @@ private final class MetalContextState {
     var nativeBuffers: [Int64: NativeBufferRecord] = [:]
     var nextTextureHandle: Int64 = 1
     var nativeTextures: [Int64: NativeTextureRecord] = [:]
+    var samplerCache: [NativeSamplerDescriptorKey: MTLSamplerState] = [:]
     var nextVertexDescriptorHandle: Int64 = 1
     var nativeVertexDescriptors: [Int64: NativeVertexDescriptorRecord] = [:]
     var nextShaderProgramHandle: Int64 = 1
@@ -625,6 +659,134 @@ private func mapNativeTextureFormat(_ pixelFormat: Int32) -> (format: MTLPixelFo
 
 private func textureLevelDimension(_ base: Int, level: Int) -> Int {
     return max(1, base >> max(level, 0))
+}
+
+private func mapSamplerMinFilter(
+    _ glMinFilter: Int32,
+    hasMipmaps: Bool
+) -> (minFilter: MTLSamplerMinMagFilter, mipFilter: MTLSamplerMipFilter, normalizedGlMinFilter: Int32, normalizedMipFilter: Int32)? {
+    switch glMinFilter {
+    case kGlNearest:
+        return (.nearest, .notMipmapped, kGlNearest, kSamplerMipFilterNotMipmapped)
+    case kGlLinear:
+        return (.linear, .notMipmapped, kGlLinear, kSamplerMipFilterNotMipmapped)
+    case kGlNearestMipmapNearest:
+        if hasMipmaps {
+            return (.nearest, .nearest, kGlNearestMipmapNearest, kSamplerMipFilterNearest)
+        }
+        return (.nearest, .notMipmapped, kGlNearest, kSamplerMipFilterNotMipmapped)
+    case kGlLinearMipmapNearest:
+        if hasMipmaps {
+            return (.linear, .nearest, kGlLinearMipmapNearest, kSamplerMipFilterNearest)
+        }
+        return (.linear, .notMipmapped, kGlLinear, kSamplerMipFilterNotMipmapped)
+    case kGlNearestMipmapLinear:
+        if hasMipmaps {
+            return (.nearest, .linear, kGlNearestMipmapLinear, kSamplerMipFilterLinear)
+        }
+        return (.nearest, .notMipmapped, kGlNearest, kSamplerMipFilterNotMipmapped)
+    case kGlLinearMipmapLinear:
+        if hasMipmaps {
+            return (.linear, .linear, kGlLinearMipmapLinear, kSamplerMipFilterLinear)
+        }
+        return (.linear, .notMipmapped, kGlLinear, kSamplerMipFilterNotMipmapped)
+    default:
+        return nil
+    }
+}
+
+private func mapSamplerMagFilter(_ glMagFilter: Int32)
+    -> (filter: MTLSamplerMinMagFilter, normalizedGlMagFilter: Int32)?
+{
+    switch glMagFilter {
+    case kGlNearest:
+        return (.nearest, kGlNearest)
+    case kGlLinear:
+        return (.linear, kGlLinear)
+    default:
+        return nil
+    }
+}
+
+private func mapSamplerAddressMode(_ glWrapMode: Int32)
+    -> (addressMode: MTLSamplerAddressMode, normalizedGlWrapMode: Int32)?
+{
+    switch glWrapMode {
+    case kGlRepeat:
+        return (.repeat, kGlRepeat)
+    case kGlClamp, kGlClampToEdge:
+        return (.clampToEdge, kGlClampToEdge)
+    case kGlMirroredRepeat:
+        return (.mirrorRepeat, kGlMirroredRepeat)
+    default:
+        return nil
+    }
+}
+
+private func resolveSamplerDescriptor(
+    textureRecord: NativeTextureRecord,
+    minFilter: Int32,
+    magFilter: Int32,
+    wrapU: Int32,
+    wrapV: Int32,
+    maxAnisotropy: Int32
+) -> ResolvedSamplerDescriptor? {
+    guard maxAnisotropy > 0 else {
+        return nil
+    }
+    guard
+        let mappedMinFilter = mapSamplerMinFilter(minFilter, hasMipmaps: textureRecord.mipLevels > 1),
+        let mappedMagFilter = mapSamplerMagFilter(magFilter),
+        let mappedWrapU = mapSamplerAddressMode(wrapU),
+        let mappedWrapV = mapSamplerAddressMode(wrapV)
+    else {
+        return nil
+    }
+
+    let normalizedAnisotropy = min(max(maxAnisotropy, 1), kMaxSamplerAnisotropy)
+    let key = NativeSamplerDescriptorKey(
+        minFilter: mappedMinFilter.normalizedGlMinFilter,
+        magFilter: mappedMagFilter.normalizedGlMagFilter,
+        mipFilter: mappedMinFilter.normalizedMipFilter,
+        wrapU: mappedWrapU.normalizedGlWrapMode,
+        wrapV: mappedWrapV.normalizedGlWrapMode,
+        maxAnisotropy: normalizedAnisotropy
+    )
+    return ResolvedSamplerDescriptor(
+        key: key,
+        minFilter: mappedMinFilter.minFilter,
+        magFilter: mappedMagFilter.filter,
+        mipFilter: mappedMinFilter.mipFilter,
+        addressU: mappedWrapU.addressMode,
+        addressV: mappedWrapV.addressMode
+    )
+}
+
+private func createSamplerState(
+    context: MetalContextState,
+    resolvedDescriptor: ResolvedSamplerDescriptor
+) -> MTLSamplerState? {
+    if let cachedSampler = context.samplerCache[resolvedDescriptor.key] {
+        return cachedSampler
+    }
+
+    let descriptor = MTLSamplerDescriptor()
+    descriptor.minFilter = resolvedDescriptor.minFilter
+    descriptor.magFilter = resolvedDescriptor.magFilter
+    descriptor.mipFilter = resolvedDescriptor.mipFilter
+    descriptor.sAddressMode = resolvedDescriptor.addressU
+    descriptor.tAddressMode = resolvedDescriptor.addressV
+    descriptor.maxAnisotropy = Int(max(resolvedDescriptor.key.maxAnisotropy, 1))
+    descriptor.normalizedCoordinates = true
+    if (context.debugFlags & kDebugFlagLabels) != 0 {
+        descriptor.label = "MCMetal Sampler \(context.samplerCache.count + 1)"
+    }
+
+    guard let samplerState = context.device.makeSamplerState(descriptor: descriptor) else {
+        return nil
+    }
+    context.samplerCache[resolvedDescriptor.key] = samplerState
+    return samplerState
 }
 
 private func createPipelineState(context: MetalContextState, key: PipelineKey)
@@ -1577,7 +1739,8 @@ public func mcmetal_swift_create_texture(
             height: heightValue,
             mipLevels: mipLevelCount,
             bytesPerPixel: mappedFormat.bytesPerPixel,
-            metalTexture: texture
+            metalTexture: texture,
+            samplerState: nil
         )
         return handle
     }
@@ -1653,6 +1816,50 @@ public func mcmetal_swift_destroy_texture(_ handle: Int64) -> Int32 {
         guard context.nativeTextures.removeValue(forKey: handle) != nil else {
             return kStatusInvalidArgument
         }
+        return kStatusOk
+    }
+}
+
+@_cdecl("mcmetal_swift_configure_texture_sampler")
+public func mcmetal_swift_configure_texture_sampler(
+    _ textureHandle: Int64,
+    _ minFilter: Int32,
+    _ magFilter: Int32,
+    _ wrapU: Int32,
+    _ wrapV: Int32,
+    _ maxAnisotropy: Int32
+) -> Int32 {
+    if textureHandle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard var textureRecord = context.nativeTextures[textureHandle] else {
+            return kStatusInvalidArgument
+        }
+        guard
+            let resolvedDescriptor = resolveSamplerDescriptor(
+                textureRecord: textureRecord,
+                minFilter: minFilter,
+                magFilter: magFilter,
+                wrapU: wrapU,
+                wrapV: wrapV,
+                maxAnisotropy: maxAnisotropy
+            )
+        else {
+            return kStatusInvalidArgument
+        }
+        guard
+            let samplerState = createSamplerState(
+                context: context,
+                resolvedDescriptor: resolvedDescriptor
+            )
+        else {
+            return kStatusInitializationFailed
+        }
+
+        textureRecord.samplerState = samplerState
+        context.nativeTextures[textureHandle] = textureRecord
         return kStatusOk
     }
 }

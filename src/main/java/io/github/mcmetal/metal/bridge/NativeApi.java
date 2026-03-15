@@ -78,6 +78,15 @@ public final class NativeApi {
 
     public static native int nativeDestroyTexture(long handle);
 
+    public static native int nativeConfigureTextureSampler(
+        long textureHandle,
+        int minFilter,
+        int magFilter,
+        int wrapU,
+        int wrapV,
+        int maxAnisotropy
+    );
+
     public static native long nativeRegisterVertexDescriptor(
         int strideBytes,
         int attributeCount,

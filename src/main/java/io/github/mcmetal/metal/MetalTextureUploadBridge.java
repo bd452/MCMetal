@@ -41,6 +41,15 @@ public final class MetalTextureUploadBridge {
             ByteBuffer data
         );
 
+        void configureTextureSampler(
+            long textureHandle,
+            int minFilter,
+            int magFilter,
+            int wrapU,
+            int wrapV,
+            int maxAnisotropy
+        );
+
         void destroyTexture(long handle);
     }
 
@@ -89,6 +98,34 @@ public final class MetalTextureUploadBridge {
         int width,
         int height
     ) {
+        onNativeImageUpload(
+            image,
+            level,
+            xOffset,
+            yOffset,
+            skipPixels,
+            skipRows,
+            width,
+            height,
+            false,
+            false,
+            level > 0
+        );
+    }
+
+    public static void onNativeImageUpload(
+        NativeImage image,
+        int level,
+        int xOffset,
+        int yOffset,
+        int skipPixels,
+        int skipRows,
+        int width,
+        int height,
+        boolean blur,
+        boolean clamp,
+        boolean mipmap
+    ) {
         if (!isBridgeActive()) {
             return;
         }
@@ -125,7 +162,10 @@ public final class MetalTextureUploadBridge {
             skipPixels,
             skipRows,
             width,
-            height
+            height,
+            blur,
+            clamp,
+            mipmap
         );
     }
 
@@ -151,6 +191,42 @@ public final class MetalTextureUploadBridge {
         int width,
         int height
     ) {
+        onImageUploadForTests(
+            boundGlTextureId,
+            imageWidth,
+            imageHeight,
+            channelCount,
+            imageData,
+            level,
+            xOffset,
+            yOffset,
+            skipPixels,
+            skipRows,
+            width,
+            height,
+            false,
+            false,
+            level > 0
+        );
+    }
+
+    static void onImageUploadForTests(
+        int boundGlTextureId,
+        int imageWidth,
+        int imageHeight,
+        int channelCount,
+        ByteBuffer imageData,
+        int level,
+        int xOffset,
+        int yOffset,
+        int skipPixels,
+        int skipRows,
+        int width,
+        int height,
+        boolean blur,
+        boolean clamp,
+        boolean mipmap
+    ) {
         uploadImageRegion(
             boundGlTextureId,
             imageWidth,
@@ -163,7 +239,10 @@ public final class MetalTextureUploadBridge {
             skipPixels,
             skipRows,
             width,
-            height
+            height,
+            blur,
+            clamp,
+            mipmap
         );
     }
 
@@ -199,7 +278,10 @@ public final class MetalTextureUploadBridge {
         int skipPixels,
         int skipRows,
         int width,
-        int height
+        int height,
+        boolean blur,
+        boolean clamp,
+        boolean mipmap
     ) {
         if (boundGlTextureId <= 0 || imageWidth <= 0 || imageHeight <= 0 || channelCount <= 0 || level < 0) {
             return;
@@ -249,6 +331,7 @@ public final class MetalTextureUploadBridge {
         }
 
         ByteBuffer updatePayload = sliceBuffer(imageData, sourceByteOffset, requiredBytes);
+        configureSamplerForUpload(textureHandle, blur, clamp, mipmap || level > 0);
         textureBackend.updateTextureRegion(
             textureHandle,
             level,
@@ -258,6 +341,25 @@ public final class MetalTextureUploadBridge {
             height,
             rowStrideBytes,
             updatePayload
+        );
+    }
+
+    private static void configureSamplerForUpload(long textureHandle, boolean blur, boolean clamp, boolean mipmap) {
+        int minFilter;
+        if (blur) {
+            minFilter = mipmap ? MetalTextureBridge.GL_LINEAR_MIPMAP_LINEAR : MetalTextureBridge.GL_LINEAR;
+        } else {
+            minFilter = mipmap ? MetalTextureBridge.GL_NEAREST_MIPMAP_NEAREST : MetalTextureBridge.GL_NEAREST;
+        }
+        int magFilter = blur ? MetalTextureBridge.GL_LINEAR : MetalTextureBridge.GL_NEAREST;
+        int wrap = clamp ? MetalTextureBridge.GL_CLAMP_TO_EDGE : MetalTextureBridge.GL_REPEAT;
+        textureBackend.configureTextureSampler(
+            textureHandle,
+            minFilter,
+            magFilter,
+            wrap,
+            wrap,
+            1
         );
     }
 
@@ -399,6 +501,25 @@ public final class MetalTextureUploadBridge {
             ByteBuffer data
         ) {
             MetalTextureBridge.updateTextureRegion(handle, mipLevel, x, y, width, height, rowStrideBytes, data);
+        }
+
+        @Override
+        public void configureTextureSampler(
+            long textureHandle,
+            int minFilter,
+            int magFilter,
+            int wrapU,
+            int wrapV,
+            int maxAnisotropy
+        ) {
+            MetalTextureBridge.configureTextureSampler(
+                textureHandle,
+                minFilter,
+                magFilter,
+                wrapU,
+                wrapV,
+                maxAnisotropy
+            );
         }
 
         @Override

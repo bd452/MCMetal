@@ -44,10 +44,15 @@ class MetalTextureUploadBridgeTest {
 
         assertEquals(1, backend.createCalls);
         assertEquals(1, backend.updateCalls);
+        assertEquals(1, backend.samplerConfigureCalls);
         assertEquals(MetalTextureFormatMapper.GL_RGBA8, backend.lastCreateInternalFormat);
         assertEquals(MetalTextureFormatMapper.GL_RGBA, backend.lastCreateFormat);
         assertEquals(MetalTextureFormatMapper.GL_UNSIGNED_BYTE, backend.lastCreateType);
         assertEquals(8 * 4 * 4, backend.lastCreateInitialDataLength);
+        assertEquals(MetalTextureBridge.GL_NEAREST, backend.lastSamplerMinFilter);
+        assertEquals(MetalTextureBridge.GL_NEAREST, backend.lastSamplerMagFilter);
+        assertEquals(MetalTextureBridge.GL_REPEAT, backend.lastSamplerWrapU);
+        assertEquals(MetalTextureBridge.GL_REPEAT, backend.lastSamplerWrapV);
         assertEquals(8 * 4, backend.lastUpdateRowStrideBytes);
         assertEquals(2, backend.lastUpdateX);
         assertEquals(1, backend.lastUpdateY);
@@ -93,7 +98,37 @@ class MetalTextureUploadBridgeTest {
 
         assertEquals(1, backend.createCalls);
         assertEquals(2, backend.updateCalls);
+        assertEquals(2, backend.samplerConfigureCalls);
         assertEquals(firstHandle, backend.lastUpdateHandle);
+    }
+
+    @Test
+    void uploadWithBlurClampAndMipmapHintsConfiguresLinearClampedSampler() {
+        ByteBuffer imageData = buffer(4 * 4 * 4);
+
+        MetalTextureUploadBridge.onImageUploadForTests(
+            77,
+            4,
+            4,
+            4,
+            imageData,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            4,
+            true,
+            true,
+            true
+        );
+
+        assertEquals(1, backend.samplerConfigureCalls);
+        assertEquals(MetalTextureBridge.GL_LINEAR_MIPMAP_LINEAR, backend.lastSamplerMinFilter);
+        assertEquals(MetalTextureBridge.GL_LINEAR, backend.lastSamplerMagFilter);
+        assertEquals(MetalTextureBridge.GL_CLAMP_TO_EDGE, backend.lastSamplerWrapU);
+        assertEquals(MetalTextureBridge.GL_CLAMP_TO_EDGE, backend.lastSamplerWrapV);
     }
 
     @Test
@@ -148,6 +183,11 @@ class MetalTextureUploadBridgeTest {
         private int lastUpdateHeight;
         private int lastUpdateRowStrideBytes;
         private byte lastUpdateFirstByte;
+        private int samplerConfigureCalls;
+        private int lastSamplerMinFilter;
+        private int lastSamplerMagFilter;
+        private int lastSamplerWrapU;
+        private int lastSamplerWrapV;
 
         @Override
         public long createTexture(
@@ -189,6 +229,22 @@ class MetalTextureUploadBridgeTest {
 
             ByteBuffer payload = data.duplicate();
             lastUpdateFirstByte = payload.get(0);
+        }
+
+        @Override
+        public void configureTextureSampler(
+            long textureHandle,
+            int minFilter,
+            int magFilter,
+            int wrapU,
+            int wrapV,
+            int maxAnisotropy
+        ) {
+            samplerConfigureCalls++;
+            lastSamplerMinFilter = minFilter;
+            lastSamplerMagFilter = magFilter;
+            lastSamplerWrapU = wrapU;
+            lastSamplerWrapV = wrapV;
         }
 
         @Override

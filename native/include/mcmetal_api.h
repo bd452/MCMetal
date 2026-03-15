@@ -163,6 +163,16 @@ extern "C"
         jclass clazz,
         jlong handle);
 
+    JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeConfigureTextureSampler(
+        JNIEnv *env,
+        jclass clazz,
+        jlong texture_handle,
+        jint min_filter,
+        jint mag_filter,
+        jint wrap_u,
+        jint wrap_v,
+        jint max_anisotropy);
+
     JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
         JNIEnv *env,
         jclass clazz,
