@@ -61,7 +61,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
 
 - [ ] 6. Phase 5 - Textures and Render Targets
   - [x] Map Minecraft texture formats and usage flags to Metal pixel formats.
-  - [ ] Implement texture creation and region update upload path (`AbstractTexture`, `NativeImage`).
+  - [x] Implement texture creation and region update upload path (`AbstractTexture`, `NativeImage`).
   - [ ] Implement sampler state mapping and caching.
   - [ ] Implement mipmap generation/update policy.
   - [ ] Implement `RenderTarget` creation/bind/resize semantics.
