@@ -778,12 +778,12 @@ private func createSamplerState(
     descriptor.tAddressMode = resolvedDescriptor.addressV
     descriptor.maxAnisotropy = Int(max(resolvedDescriptor.key.maxAnisotropy, 1))
     descriptor.normalizedCoordinates = true
+    if (context.debugFlags & kDebugFlagLabels) != 0 {
+        descriptor.label = "MCMetal Sampler \(context.samplerCache.count + 1)"
+    }
 
     guard let samplerState = context.device.makeSamplerState(descriptor: descriptor) else {
         return nil
-    }
-    if (context.debugFlags & kDebugFlagLabels) != 0 {
-        samplerState.label = "MCMetal Sampler \(context.samplerCache.count + 1)"
     }
     context.samplerCache[resolvedDescriptor.key] = samplerState
     return samplerState
