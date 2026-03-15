@@ -37,11 +37,32 @@ public final class MetalTextureBridge {
         );
 
         int destroyTexture(long handle);
+
+        int configureTextureSampler(
+            long textureHandle,
+            int minFilter,
+            int magFilter,
+            int wrapU,
+            int wrapV,
+            int maxAnisotropy
+        );
     }
 
     public static final int USAGE_SAMPLED = 1 << 0;
     public static final int USAGE_RENDER_TARGET = 1 << 1;
     public static final int USAGE_SHADER_WRITE = 1 << 2;
+
+    static final int GL_NEAREST = 0x2600;
+    static final int GL_LINEAR = 0x2601;
+    static final int GL_NEAREST_MIPMAP_NEAREST = 0x2700;
+    static final int GL_LINEAR_MIPMAP_NEAREST = 0x2701;
+    static final int GL_NEAREST_MIPMAP_LINEAR = 0x2702;
+    static final int GL_LINEAR_MIPMAP_LINEAR = 0x2703;
+    static final int GL_REPEAT = 0x2901;
+    static final int GL_CLAMP = 0x2900;
+    static final int GL_CLAMP_TO_EDGE = 0x812F;
+    static final int GL_MIRRORED_REPEAT = 0x8370;
+    private static final int MAX_SUPPORTED_ANISOTROPY = 16;
 
     private static final Map<Long, TextureRecord> TEXTURES = new ConcurrentHashMap<>();
     private static volatile NativeTextureBackend nativeTextureBackend = new JniNativeTextureBackend();
@@ -91,7 +112,7 @@ public final class MetalTextureBridge {
             throw new NativeBridgeException("Native operation nativeCreateTexture failed.");
         }
 
-        TEXTURES.put(handle, new TextureRecord(mapped, width, height, mipLevels));
+        TEXTURES.put(handle, new TextureRecord(mapped, width, height, mipLevels, null));
         return handle;
     }
 
@@ -157,6 +178,52 @@ public final class MetalTextureBridge {
         requireSuccess("nativeUpdateTexture", status);
     }
 
+    public static void configureTextureSampler(
+        long textureHandle,
+        int minFilter,
+        int magFilter,
+        int wrapU,
+        int wrapV,
+        int maxAnisotropy
+    ) {
+        if (textureHandle <= 0L) {
+            throw new IllegalArgumentException("Texture handle must be positive.");
+        }
+        if (maxAnisotropy <= 0) {
+            throw new IllegalArgumentException("maxAnisotropy must be at least 1.");
+        }
+
+        TextureRecord record = TEXTURES.get(textureHandle);
+        if (record == null) {
+            throw new IllegalArgumentException("Unknown native texture handle: " + textureHandle);
+        }
+
+        SamplerConfig requestedConfig = normalizeSamplerConfig(record, minFilter, magFilter, wrapU, wrapV, maxAnisotropy);
+        if (requestedConfig.equals(record.samplerConfig())) {
+            return;
+        }
+
+        int status = nativeTextureBackend.configureTextureSampler(
+            textureHandle,
+            requestedConfig.minFilter(),
+            requestedConfig.magFilter(),
+            requestedConfig.wrapU(),
+            requestedConfig.wrapV(),
+            requestedConfig.maxAnisotropy()
+        );
+        requireSuccess("nativeConfigureTextureSampler", status);
+        TEXTURES.put(
+            textureHandle,
+            new TextureRecord(
+                record.mappedFormat(),
+                record.width(),
+                record.height(),
+                record.mipLevels(),
+                requestedConfig
+            )
+        );
+    }
+
     public static void destroyTexture(long handle) {
         if (handle <= 0L) {
             return;
@@ -179,6 +246,66 @@ public final class MetalTextureBridge {
     static void resetForTests() {
         TEXTURES.clear();
         nativeTextureBackend = new JniNativeTextureBackend();
+    }
+
+    private static SamplerConfig normalizeSamplerConfig(
+        TextureRecord record,
+        int minFilter,
+        int magFilter,
+        int wrapU,
+        int wrapV,
+        int maxAnisotropy
+    ) {
+        int normalizedMinFilter = normalizeMinFilter(minFilter, record.mipLevels() > 1);
+        int normalizedMagFilter = normalizeMagFilter(magFilter);
+        int normalizedWrapU = normalizeWrap(wrapU);
+        int normalizedWrapV = normalizeWrap(wrapV);
+        int normalizedMaxAnisotropy = Math.min(maxAnisotropy, MAX_SUPPORTED_ANISOTROPY);
+        return new SamplerConfig(
+            normalizedMinFilter,
+            normalizedMagFilter,
+            normalizedWrapU,
+            normalizedWrapV,
+            normalizedMaxAnisotropy
+        );
+    }
+
+    private static int normalizeMinFilter(int minFilter, boolean hasMipmaps) {
+        int normalized = switch (minFilter) {
+            case GL_NEAREST,
+                GL_LINEAR,
+                GL_NEAREST_MIPMAP_NEAREST,
+                GL_LINEAR_MIPMAP_NEAREST,
+                GL_NEAREST_MIPMAP_LINEAR,
+                GL_LINEAR_MIPMAP_LINEAR -> minFilter;
+            default -> throw new IllegalArgumentException("Unsupported texture min filter: " + minFilter);
+        };
+
+        if (hasMipmaps) {
+            return normalized;
+        }
+
+        return switch (normalized) {
+            case GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST_MIPMAP_LINEAR -> GL_NEAREST;
+            case GL_LINEAR_MIPMAP_NEAREST, GL_LINEAR_MIPMAP_LINEAR -> GL_LINEAR;
+            default -> normalized;
+        };
+    }
+
+    private static int normalizeMagFilter(int magFilter) {
+        return switch (magFilter) {
+            case GL_NEAREST, GL_LINEAR -> magFilter;
+            default -> throw new IllegalArgumentException("Unsupported texture mag filter: " + magFilter);
+        };
+    }
+
+    private static int normalizeWrap(int wrapMode) {
+        return switch (wrapMode) {
+            case GL_REPEAT -> GL_REPEAT;
+            case GL_CLAMP, GL_CLAMP_TO_EDGE -> GL_CLAMP_TO_EDGE;
+            case GL_MIRRORED_REPEAT -> GL_MIRRORED_REPEAT;
+            default -> throw new IllegalArgumentException("Unsupported texture wrap mode: " + wrapMode);
+        };
     }
 
     private static int computeMipLevels(int width, int height) {
@@ -220,7 +347,17 @@ public final class MetalTextureBridge {
         MetalTextureFormatMapper.MappedTextureFormat mappedFormat,
         int width,
         int height,
-        int mipLevels
+        int mipLevels,
+        @Nullable SamplerConfig samplerConfig
+    ) {
+    }
+
+    private record SamplerConfig(
+        int minFilter,
+        int magFilter,
+        int wrapU,
+        int wrapV,
+        int maxAnisotropy
     ) {
     }
 
@@ -274,6 +411,25 @@ public final class MetalTextureBridge {
         @Override
         public int destroyTexture(long handle) {
             return NativeApi.nativeDestroyTexture(handle);
+        }
+
+        @Override
+        public int configureTextureSampler(
+            long textureHandle,
+            int minFilter,
+            int magFilter,
+            int wrapU,
+            int wrapV,
+            int maxAnisotropy
+        ) {
+            return NativeApi.nativeConfigureTextureSampler(
+                textureHandle,
+                minFilter,
+                magFilter,
+                wrapU,
+                wrapV,
+                maxAnisotropy
+            );
         }
     }
 }

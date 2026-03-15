@@ -51,7 +51,10 @@ abstract class NativeImageMixin {
             skipPixels,
             skipRows,
             width,
-            height
+            height,
+            blur,
+            clamp,
+            level > 0
         );
     }
 
@@ -78,7 +81,10 @@ abstract class NativeImageMixin {
             skipPixels,
             skipRows,
             width,
-            height
+            height,
+            blur,
+            clamp,
+            mipmap
         );
     }
 }

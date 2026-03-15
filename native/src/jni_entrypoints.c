@@ -360,6 +360,27 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestr
   return (jint)mcmetal_swift_destroy_texture((int64_t)handle);
 }
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeConfigureTextureSampler(
+    JNIEnv *env,
+    jclass clazz,
+    jlong texture_handle,
+    jint min_filter,
+    jint mag_filter,
+    jint wrap_u,
+    jint wrap_v,
+    jint max_anisotropy)
+{
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_configure_texture_sampler(
+      (int64_t)texture_handle,
+      (int32_t)min_filter,
+      (int32_t)mag_filter,
+      (int32_t)wrap_u,
+      (int32_t)wrap_v,
+      (int32_t)max_anisotropy);
+}
+
 JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
     JNIEnv *env,
     jclass clazz,

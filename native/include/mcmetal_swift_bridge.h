@@ -120,6 +120,14 @@ extern "C"
     int32_t mcmetal_swift_destroy_texture(
         int64_t handle);
 
+    int32_t mcmetal_swift_configure_texture_sampler(
+        int64_t texture_handle,
+        int32_t min_filter,
+        int32_t mag_filter,
+        int32_t wrap_u,
+        int32_t wrap_v,
+        int32_t max_anisotropy);
+
     int64_t mcmetal_swift_register_vertex_descriptor(
         int32_t stride_bytes,
         int32_t attribute_count,
