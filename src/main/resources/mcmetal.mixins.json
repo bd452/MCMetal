@@ -8,7 +8,10 @@
     "VertexBufferMixin",
     "RenderSystemMixin",
     "ShaderProgramMixin",
-    "ShaderStageMixin"
+    "ShaderStageMixin",
+    "AbstractTextureMixin",
+    "NativeImageMixin",
+    "NativeImagePointerAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
