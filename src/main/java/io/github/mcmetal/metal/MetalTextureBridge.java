@@ -70,7 +70,7 @@ public final class MetalTextureBridge {
         ByteBuffer payload = initialData == null ? null : initialData.duplicate();
         int payloadLength = payload == null ? 0 : payload.remaining();
         if (payloadLength > 0) {
-            int minimumBytes = width * height * mapped.bytesPerPixel();
+            long minimumBytes = requiredByteCount(width, height, mapped.bytesPerPixel());
             if (payloadLength < minimumBytes) {
                 throw new IllegalArgumentException(
                     "Initial texture upload underflow: expected at least " + minimumBytes + " bytes but got " + payloadLength + "."
@@ -136,7 +136,7 @@ public final class MetalTextureBridge {
 
         ByteBuffer payload = data.duplicate();
         int payloadLength = payload.remaining();
-        int requiredBytes = rowStrideBytes * height;
+        long requiredBytes = requiredByteCount(rowStrideBytes, height, 1);
         if (payloadLength < requiredBytes) {
             throw new IllegalArgumentException(
                 "Texture update underflow: expected at least " + requiredBytes + " bytes but got " + payloadLength + "."
@@ -162,13 +162,14 @@ public final class MetalTextureBridge {
             return;
         }
 
-        TextureRecord removed = TEXTURES.remove(handle);
-        if (removed == null) {
+        TextureRecord existingRecord = TEXTURES.get(handle);
+        if (existingRecord == null) {
             return;
         }
 
         int status = nativeTextureBackend.destroyTexture(handle);
         requireSuccess("nativeDestroyTexture", status);
+        TEXTURES.remove(handle);
     }
 
     static void setNativeTextureBackendForTests(NativeTextureBackend backend) {
@@ -187,6 +188,14 @@ public final class MetalTextureBridge {
 
     private static int levelDimension(int baseDimension, int mipLevel) {
         return Math.max(1, baseDimension >> mipLevel);
+    }
+
+    private static long requiredByteCount(int a, int b, int c) {
+        long bytes = (long) a * (long) b * (long) c;
+        if (bytes < 0 || bytes > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Texture payload size exceeds supported direct buffer range.");
+        }
+        return bytes;
     }
 
     private static void requireSuccess(String operation, int statusCode) {

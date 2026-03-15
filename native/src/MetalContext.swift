@@ -29,7 +29,7 @@ private let kNativeTextureFormatR8Unorm: Int32 = 1
 private let kNativeTextureFormatRG8Unorm: Int32 = 2
 private let kNativeTextureFormatRGBA8Unorm: Int32 = 3
 private let kNativeTextureFormatBGRA8Unorm: Int32 = 4
-private let kNativeTextureFormatBGRA8UnormSrgb: Int32 = 5
+private let kNativeTextureFormatRGBA8UnormSrgb: Int32 = 5
 private let kNativeTextureFormatRGBA16Float: Int32 = 6
 private let kNativeTextureFormatRGBA32Float: Int32 = 7
 private let kNativeTextureFormatDepth24Stencil8: Int32 = 8
@@ -608,8 +608,8 @@ private func mapNativeTextureFormat(_ pixelFormat: Int32) -> (format: MTLPixelFo
         return (.rgba8Unorm, 4)
     case kNativeTextureFormatBGRA8Unorm:
         return (.bgra8Unorm, 4)
-    case kNativeTextureFormatBGRA8UnormSrgb:
-        return (.bgra8Unorm_srgb, 4)
+    case kNativeTextureFormatRGBA8UnormSrgb:
+        return (.rgba8Unorm_srgb, 4)
     case kNativeTextureFormatRGBA16Float:
         return (.rgba16Float, 8)
     case kNativeTextureFormatRGBA32Float:

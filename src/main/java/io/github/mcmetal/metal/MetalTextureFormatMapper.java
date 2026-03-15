@@ -29,7 +29,7 @@ public final class MetalTextureFormatMapper {
     public static final int NATIVE_TEXTURE_FORMAT_RG8_UNORM = 2;
     public static final int NATIVE_TEXTURE_FORMAT_RGBA8_UNORM = 3;
     public static final int NATIVE_TEXTURE_FORMAT_BGRA8_UNORM = 4;
-    public static final int NATIVE_TEXTURE_FORMAT_BGRA8_UNORM_SRGB = 5;
+    public static final int NATIVE_TEXTURE_FORMAT_RGBA8_UNORM_SRGB = 5;
     public static final int NATIVE_TEXTURE_FORMAT_RGBA16_FLOAT = 6;
     public static final int NATIVE_TEXTURE_FORMAT_RGBA32_FLOAT = 7;
     public static final int NATIVE_TEXTURE_FORMAT_DEPTH24_STENCIL8 = 8;
@@ -61,7 +61,7 @@ public final class MetalTextureFormatMapper {
             case GL_R8 -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_R8_UNORM, 1, false, false);
             case GL_RG8 -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_RG8_UNORM, 2, false, false);
             case GL_RGBA8 -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_RGBA8_UNORM, 4, false, false);
-            case GL_SRGB8_ALPHA8 -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_BGRA8_UNORM_SRGB, 4, true, false);
+            case GL_SRGB8_ALPHA8 -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_RGBA8_UNORM_SRGB, 4, true, false);
             case GL_RGBA16F -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_RGBA16_FLOAT, 8, false, false);
             case GL_RGBA32F -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_RGBA32_FLOAT, 16, false, false);
             case GL_DEPTH24_STENCIL8 -> new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_DEPTH24_STENCIL8, 4, false, true);

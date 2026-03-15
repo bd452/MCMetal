@@ -46,6 +46,19 @@ class MetalTextureFormatMapperTest {
     }
 
     @Test
+    void mapsSrgbInternalFormatToNativeRgbaSrgb() {
+        MetalTextureFormatMapper.MappedTextureFormat mapped = MetalTextureFormatMapper.mapOrThrow(
+            MetalTextureFormatMapper.GL_SRGB8_ALPHA8,
+            MetalTextureFormatMapper.GL_RGBA,
+            MetalTextureFormatMapper.GL_UNSIGNED_BYTE
+        );
+
+        assertEquals(MetalTextureFormatMapper.NATIVE_TEXTURE_FORMAT_RGBA8_UNORM_SRGB, mapped.nativePixelFormat());
+        assertEquals(4, mapped.bytesPerPixel());
+        assertTrue(mapped.srgb());
+    }
+
+    @Test
     void rejectsUnsupportedTextureFormatTuple() {
         assertThrows(
             IllegalArgumentException.class,
