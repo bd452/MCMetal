@@ -15,6 +15,7 @@ public final class MetalTextureFormatMapper {
     public static final int GL_HALF_FLOAT = 0x140B;
     public static final int GL_UNSIGNED_INT_8_8_8_8_REV = 0x8367;
     public static final int GL_UNSIGNED_INT_24_8 = 0x84FA;
+    public static final int GL_FLOAT_32_UNSIGNED_INT_24_8_REV = 0x8DAD;
 
     public static final int GL_R8 = 0x8229;
     public static final int GL_RG8 = 0x822B;
@@ -91,6 +92,9 @@ public final class MetalTextureFormatMapper {
         }
         if (format == GL_DEPTH_STENCIL && type == GL_UNSIGNED_INT_24_8) {
             return new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_DEPTH24_STENCIL8, 4, false, true);
+        }
+        if (format == GL_DEPTH_STENCIL && type == GL_FLOAT_32_UNSIGNED_INT_24_8_REV) {
+            return new MappedTextureFormat(NATIVE_TEXTURE_FORMAT_DEPTH32F_STENCIL8, 8, false, true);
         }
         return null;
     }
