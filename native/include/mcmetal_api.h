@@ -134,6 +134,35 @@ extern "C"
         jclass clazz,
         jlong handle);
 
+    JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCreateTexture(
+        JNIEnv *env,
+        jclass clazz,
+        jint pixel_format,
+        jint width,
+        jint height,
+        jint mip_levels,
+        jint usage_flags,
+        jobject initial_data,
+        jint initial_data_length);
+
+    JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdateTexture(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jint mip_level,
+        jint x,
+        jint y,
+        jint width,
+        jint height,
+        jobject data,
+        jint data_length,
+        jint row_stride_bytes);
+
+    JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyTexture(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle);
+
     JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
         JNIEnv *env,
         jclass clazz,

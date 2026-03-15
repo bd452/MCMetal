@@ -97,6 +97,29 @@ extern "C"
     int32_t mcmetal_swift_destroy_buffer(
         int64_t handle);
 
+    int64_t mcmetal_swift_create_texture(
+        int32_t pixel_format,
+        int32_t width,
+        int32_t height,
+        int32_t mip_levels,
+        int32_t usage_flags,
+        const void *initial_data,
+        int32_t initial_data_length);
+
+    int32_t mcmetal_swift_update_texture(
+        int64_t handle,
+        int32_t mip_level,
+        int32_t x,
+        int32_t y,
+        int32_t width,
+        int32_t height,
+        const void *data,
+        int32_t data_length,
+        int32_t row_stride_bytes);
+
+    int32_t mcmetal_swift_destroy_texture(
+        int64_t handle);
+
     int64_t mcmetal_swift_register_vertex_descriptor(
         int32_t stride_bytes,
         int32_t attribute_count,

@@ -284,6 +284,82 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestr
   return (jint)mcmetal_swift_destroy_buffer((int64_t)handle);
 }
 
+JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeCreateTexture(
+    JNIEnv *env,
+    jclass clazz,
+    jint pixel_format,
+    jint width,
+    jint height,
+    jint mip_levels,
+    jint usage_flags,
+    jobject initial_data,
+    jint initial_data_length)
+{
+  (void)clazz;
+  const void *initial_data_ptr = NULL;
+  if (initial_data != NULL)
+  {
+    initial_data_ptr = (*env)->GetDirectBufferAddress(env, initial_data);
+    if (initial_data_ptr == NULL && initial_data_length > 0)
+    {
+      return (jlong)0;
+    }
+  }
+  return (jlong)mcmetal_swift_create_texture(
+      (int32_t)pixel_format,
+      (int32_t)width,
+      (int32_t)height,
+      (int32_t)mip_levels,
+      (int32_t)usage_flags,
+      initial_data_ptr,
+      (int32_t)initial_data_length);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdateTexture(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle,
+    jint mip_level,
+    jint x,
+    jint y,
+    jint width,
+    jint height,
+    jobject data,
+    jint data_length,
+    jint row_stride_bytes)
+{
+  (void)clazz;
+  const void *data_ptr = NULL;
+  if (data != NULL)
+  {
+    data_ptr = (*env)->GetDirectBufferAddress(env, data);
+    if (data_ptr == NULL && data_length > 0)
+    {
+      return (jint)2;
+    }
+  }
+  return (jint)mcmetal_swift_update_texture(
+      (int64_t)handle,
+      (int32_t)mip_level,
+      (int32_t)x,
+      (int32_t)y,
+      (int32_t)width,
+      (int32_t)height,
+      data_ptr,
+      (int32_t)data_length,
+      (int32_t)row_stride_bytes);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyTexture(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle)
+{
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_destroy_texture((int64_t)handle);
+}
+
 JNIEXPORT jlong JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeRegisterVertexDescriptor(
     JNIEnv *env,
     jclass clazz,
