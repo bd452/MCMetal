@@ -182,6 +182,43 @@ class MetalTextureBridgeTest {
         );
     }
 
+    @Test
+    void generateMipmapsSubmitsNativeCommandForMipmappedTexture() {
+        long handle = MetalTextureBridge.createTexture(
+            MetalTextureFormatMapper.GL_RGBA8,
+            MetalTextureFormatMapper.GL_RGBA,
+            MetalTextureFormatMapper.GL_UNSIGNED_BYTE,
+            32,
+            16,
+            true,
+            false,
+            null
+        );
+
+        MetalTextureBridge.generateMipmaps(handle);
+
+        assertEquals(1, backend.generateMipmapsCalls);
+        assertEquals(handle, backend.lastGeneratedMipmapsHandle);
+    }
+
+    @Test
+    void generateMipmapsNoOpsForSingleLevelTexture() {
+        long handle = MetalTextureBridge.createTexture(
+            MetalTextureFormatMapper.GL_RGBA8,
+            MetalTextureFormatMapper.GL_RGBA,
+            MetalTextureFormatMapper.GL_UNSIGNED_BYTE,
+            8,
+            8,
+            false,
+            false,
+            null
+        );
+
+        MetalTextureBridge.generateMipmaps(handle);
+
+        assertEquals(0, backend.generateMipmapsCalls);
+    }
+
     private static ByteBuffer buffer(int size) {
         ByteBuffer buffer = ByteBuffer.allocateDirect(size);
         for (int i = 0; i < size; i++) {
@@ -207,6 +244,8 @@ class MetalTextureBridgeTest {
         private int lastSamplerWrapU;
         private int lastSamplerWrapV;
         private int lastSamplerMaxAnisotropy;
+        private int generateMipmapsCalls;
+        private long lastGeneratedMipmapsHandle;
 
         @Override
         public long createTexture(
@@ -246,6 +285,13 @@ class MetalTextureBridgeTest {
         @Override
         public int destroyTexture(long handle) {
             destroyCalls++;
+            return NativeStatus.OK;
+        }
+
+        @Override
+        public int generateMipmaps(long handle) {
+            generateMipmapsCalls++;
+            lastGeneratedMipmapsHandle = handle;
             return NativeStatus.OK;
         }
 

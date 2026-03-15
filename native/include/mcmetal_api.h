@@ -158,6 +158,11 @@ extern "C"
         jint data_length,
         jint row_stride_bytes);
 
+    JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeGenerateTextureMipmaps(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle);
+
     JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyTexture(
         JNIEnv *env,
         jclass clazz,

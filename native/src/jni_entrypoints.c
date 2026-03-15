@@ -350,6 +350,16 @@ JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeUpdat
       (int32_t)row_stride_bytes);
 }
 
+JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeGenerateTextureMipmaps(
+    JNIEnv *env,
+    jclass clazz,
+    jlong handle)
+{
+  (void)env;
+  (void)clazz;
+  return (jint)mcmetal_swift_generate_texture_mipmaps((int64_t)handle);
+}
+
 JNIEXPORT jint JNICALL Java_io_github_mcmetal_metal_bridge_NativeApi_nativeDestroyTexture(
     JNIEnv *env,
     jclass clazz,

@@ -45,6 +45,8 @@ class MetalTextureUploadBridgeTest {
         assertEquals(1, backend.createCalls);
         assertEquals(1, backend.updateCalls);
         assertEquals(1, backend.samplerConfigureCalls);
+        assertEquals(0, backend.mipmapGenerationCalls);
+        assertEquals(false, backend.lastCreateMipmapped);
         assertEquals(MetalTextureFormatMapper.GL_RGBA8, backend.lastCreateInternalFormat);
         assertEquals(MetalTextureFormatMapper.GL_RGBA, backend.lastCreateFormat);
         assertEquals(MetalTextureFormatMapper.GL_UNSIGNED_BYTE, backend.lastCreateType);
@@ -99,6 +101,7 @@ class MetalTextureUploadBridgeTest {
         assertEquals(1, backend.createCalls);
         assertEquals(2, backend.updateCalls);
         assertEquals(2, backend.samplerConfigureCalls);
+        assertEquals(0, backend.mipmapGenerationCalls);
         assertEquals(firstHandle, backend.lastUpdateHandle);
     }
 
@@ -125,10 +128,106 @@ class MetalTextureUploadBridgeTest {
         );
 
         assertEquals(1, backend.samplerConfigureCalls);
+        assertEquals(1, backend.mipmapGenerationCalls);
+        assertEquals(true, backend.lastCreateMipmapped);
         assertEquals(MetalTextureBridge.GL_LINEAR_MIPMAP_LINEAR, backend.lastSamplerMinFilter);
         assertEquals(MetalTextureBridge.GL_LINEAR, backend.lastSamplerMagFilter);
         assertEquals(MetalTextureBridge.GL_CLAMP_TO_EDGE, backend.lastSamplerWrapU);
         assertEquals(MetalTextureBridge.GL_CLAMP_TO_EDGE, backend.lastSamplerWrapV);
+    }
+
+    @Test
+    void uploadThatTransitionsToMipmappedTextureRecreatesNativeHandle() {
+        ByteBuffer imageData = buffer(8 * 8 * 4);
+
+        MetalTextureUploadBridge.onImageUploadForTests(
+            15,
+            8,
+            8,
+            4,
+            imageData,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8,
+            8,
+            false,
+            false,
+            false
+        );
+        long firstHandle = backend.lastUpdateHandle;
+
+        MetalTextureUploadBridge.onImageUploadForTests(
+            15,
+            8,
+            8,
+            4,
+            imageData,
+            1,
+            0,
+            0,
+            0,
+            0,
+            4,
+            4,
+            false,
+            false,
+            true
+        );
+
+        assertEquals(2, backend.createCalls);
+        assertEquals(1, backend.destroyCalls);
+        assertEquals(2, backend.updateCalls);
+        assertEquals(0, backend.mipmapGenerationCalls);
+        assertEquals(false, backend.firstCreateMipmapped);
+        assertEquals(true, backend.lastCreateMipmapped);
+        assertEquals(true, backend.lastUpdateHandle != firstHandle);
+    }
+
+    @Test
+    void levelZeroUpdatesRegenerateMipmapsForExistingMipmappedTexture() {
+        ByteBuffer imageData = buffer(8 * 8 * 4);
+
+        MetalTextureUploadBridge.onImageUploadForTests(
+            23,
+            8,
+            8,
+            4,
+            imageData,
+            0,
+            0,
+            0,
+            0,
+            0,
+            8,
+            8,
+            true,
+            false,
+            true
+        );
+        MetalTextureUploadBridge.onImageUploadForTests(
+            23,
+            8,
+            8,
+            4,
+            imageData,
+            0,
+            1,
+            1,
+            0,
+            0,
+            4,
+            4,
+            false,
+            false,
+            false
+        );
+
+        assertEquals(1, backend.createCalls);
+        assertEquals(2, backend.updateCalls);
+        assertEquals(2, backend.mipmapGenerationCalls);
     }
 
     @Test
@@ -176,6 +275,8 @@ class MetalTextureUploadBridgeTest {
         private int lastCreateFormat;
         private int lastCreateType;
         private int lastCreateInitialDataLength;
+        private boolean lastCreateMipmapped;
+        private boolean firstCreateMipmapped;
         private long lastUpdateHandle;
         private int lastUpdateX;
         private int lastUpdateY;
@@ -188,6 +289,7 @@ class MetalTextureUploadBridgeTest {
         private int lastSamplerMagFilter;
         private int lastSamplerWrapU;
         private int lastSamplerWrapV;
+        private int mipmapGenerationCalls;
 
         @Override
         public long createTexture(
@@ -201,10 +303,14 @@ class MetalTextureUploadBridgeTest {
             @Nullable ByteBuffer initialData
         ) {
             createCalls++;
+            if (createCalls == 1) {
+                firstCreateMipmapped = mipmapped;
+            }
             lastCreateInternalFormat = internalFormat;
             lastCreateFormat = format;
             lastCreateType = type;
             lastCreateInitialDataLength = initialData == null ? 0 : initialData.remaining();
+            lastCreateMipmapped = mipmapped;
             return nextHandle++;
         }
 
@@ -250,6 +356,11 @@ class MetalTextureUploadBridgeTest {
         @Override
         public void destroyTexture(long handle) {
             destroyCalls++;
+        }
+
+        @Override
+        public void generateMipmaps(long textureHandle) {
+            mipmapGenerationCalls++;
         }
     }
 }

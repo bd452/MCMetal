@@ -50,6 +50,8 @@ public final class MetalTextureUploadBridge {
             int maxAnisotropy
         );
 
+        void generateMipmaps(long textureHandle);
+
         void destroyTexture(long handle);
     }
 
@@ -57,7 +59,8 @@ public final class MetalTextureUploadBridge {
         int currentBoundTexture2d();
     }
 
-    private static final Map<Integer, Long> NATIVE_TEXTURES_BY_GL_ID = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<Integer, NativeTextureBinding> NATIVE_TEXTURES_BY_GL_ID =
+        Collections.synchronizedMap(new HashMap<>());
     private static final Map<Object, Integer> GL_IDS_BY_TEXTURE_IDENTITY = Collections.synchronizedMap(new IdentityHashMap<>());
 
     private static volatile TextureBackend textureBackend = new JniTextureBackend();
@@ -299,29 +302,38 @@ public final class MetalTextureUploadBridge {
             return;
         }
 
-        long textureHandle = NATIVE_TEXTURES_BY_GL_ID.getOrDefault(boundGlTextureId, 0L);
-        if (textureHandle <= 0L) {
+        boolean mipmappedUpload = mipmap || level > 0;
+        NativeTextureBinding existingBinding = NATIVE_TEXTURES_BY_GL_ID.get(boundGlTextureId);
+        if (shouldRecreateNativeTexture(existingBinding, imageWidth, imageHeight, channelCount, mipmappedUpload)) {
+            if (existingBinding != null) {
+                textureBackend.destroyTexture(existingBinding.handle());
+            }
+
             TextureFormatTuple tuple = mapTextureFormatTuple(channelCount);
             if (tuple == null) {
                 return;
             }
 
             ByteBuffer initialPayload = sliceBuffer(imageData, 0, fullByteCount);
-            boolean mipmapped = level > 0;
-            textureHandle = textureBackend.createTexture(
+            long textureHandle = textureBackend.createTexture(
                 tuple.internalFormat(),
                 tuple.format(),
                 tuple.type(),
                 imageWidth,
                 imageHeight,
-                mipmapped,
+                mipmappedUpload,
                 false,
                 initialPayload
             );
             if (textureHandle <= 0L) {
                 return;
             }
-            NATIVE_TEXTURES_BY_GL_ID.put(boundGlTextureId, textureHandle);
+            existingBinding = new NativeTextureBinding(textureHandle, imageWidth, imageHeight, channelCount, mipmappedUpload);
+            NATIVE_TEXTURES_BY_GL_ID.put(boundGlTextureId, existingBinding);
+        }
+
+        if (existingBinding == null) {
+            return;
         }
 
         int sourceByteOffset = checkedMultiply(checkedAdd(checkedMultiply(skipRows, imageWidth), skipPixels), channelCount);
@@ -331,9 +343,9 @@ public final class MetalTextureUploadBridge {
         }
 
         ByteBuffer updatePayload = sliceBuffer(imageData, sourceByteOffset, requiredBytes);
-        configureSamplerForUpload(textureHandle, blur, clamp, mipmap || level > 0);
+        configureSamplerForUpload(existingBinding.handle(), blur, clamp, existingBinding.mipmapped());
         textureBackend.updateTextureRegion(
-            textureHandle,
+            existingBinding.handle(),
             level,
             xOffset,
             yOffset,
@@ -342,6 +354,9 @@ public final class MetalTextureUploadBridge {
             rowStrideBytes,
             updatePayload
         );
+        if (existingBinding.mipmapped() && level == 0) {
+            textureBackend.generateMipmaps(existingBinding.handle());
+        }
     }
 
     private static void configureSamplerForUpload(long textureHandle, boolean blur, boolean clamp, boolean mipmap) {
@@ -373,9 +388,9 @@ public final class MetalTextureUploadBridge {
             return;
         }
 
-        Long handle = NATIVE_TEXTURES_BY_GL_ID.remove(previousGlId);
-        if (handle != null && handle > 0L) {
-            NATIVE_TEXTURES_BY_GL_ID.put(glId, handle);
+        NativeTextureBinding binding = NATIVE_TEXTURES_BY_GL_ID.remove(previousGlId);
+        if (binding != null && binding.handle() > 0L) {
+            NATIVE_TEXTURES_BY_GL_ID.put(glId, binding);
         }
     }
 
@@ -391,11 +406,30 @@ public final class MetalTextureUploadBridge {
         if (glId <= 0) {
             return;
         }
-        Long nativeHandle = NATIVE_TEXTURES_BY_GL_ID.remove(glId);
-        if (nativeHandle == null || nativeHandle <= 0L) {
+        NativeTextureBinding binding = NATIVE_TEXTURES_BY_GL_ID.remove(glId);
+        if (binding == null || binding.handle() <= 0L) {
             return;
         }
-        textureBackend.destroyTexture(nativeHandle);
+        textureBackend.destroyTexture(binding.handle());
+    }
+
+    private static boolean shouldRecreateNativeTexture(
+        @Nullable NativeTextureBinding existingBinding,
+        int imageWidth,
+        int imageHeight,
+        int channelCount,
+        boolean mipmappedUpload
+    ) {
+        if (existingBinding == null || existingBinding.handle() <= 0L) {
+            return true;
+        }
+        if (existingBinding.width() != imageWidth || existingBinding.height() != imageHeight) {
+            return true;
+        }
+        if (existingBinding.channelCount() != channelCount) {
+            return true;
+        }
+        return mipmappedUpload && !existingBinding.mipmapped();
     }
 
     private static int checkedMultiply(int left, int right) {
@@ -456,6 +490,15 @@ public final class MetalTextureUploadBridge {
     }
 
     private record TextureFormatTuple(int internalFormat, int format, int type) {
+    }
+
+    private record NativeTextureBinding(
+        long handle,
+        int width,
+        int height,
+        int channelCount,
+        boolean mipmapped
+    ) {
     }
 
     private static final class OpenGlBoundTextureReader implements BoundTextureReader {
@@ -520,6 +563,11 @@ public final class MetalTextureUploadBridge {
                 wrapV,
                 maxAnisotropy
             );
+        }
+
+        @Override
+        public void generateMipmaps(long textureHandle) {
+            MetalTextureBridge.generateMipmaps(textureHandle);
         }
 
         @Override
