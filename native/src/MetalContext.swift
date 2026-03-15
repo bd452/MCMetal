@@ -1806,6 +1806,38 @@ public func mcmetal_swift_update_texture(
     }
 }
 
+@_cdecl("mcmetal_swift_generate_texture_mipmaps")
+public func mcmetal_swift_generate_texture_mipmaps(_ handle: Int64) -> Int32 {
+    if handle <= 0 {
+        return kStatusInvalidArgument
+    }
+
+    return withContextState { context in
+        guard let record = context.nativeTextures[handle] else {
+            return kStatusInvalidArgument
+        }
+        if record.mipLevels <= 1 {
+            return kStatusOk
+        }
+
+        guard let commandBuffer = context.commandQueue.makeCommandBuffer(),
+            let blitEncoder = commandBuffer.makeBlitCommandEncoder()
+        else {
+            return kStatusInitializationFailed
+        }
+
+        if (context.debugFlags & kDebugFlagLabels) != 0 {
+            commandBuffer.label = "MCMetal Texture Mipmap Command Buffer"
+            blitEncoder.label = "MCMetal Texture Mipmap Blit Encoder"
+        }
+
+        blitEncoder.generateMipmaps(for: record.metalTexture)
+        blitEncoder.endEncoding()
+        commandBuffer.commit()
+        return kStatusOk
+    }
+}
+
 @_cdecl("mcmetal_swift_destroy_texture")
 public func mcmetal_swift_destroy_texture(_ handle: Int64) -> Int32 {
     if handle <= 0 {

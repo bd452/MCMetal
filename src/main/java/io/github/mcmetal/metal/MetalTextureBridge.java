@@ -36,6 +36,8 @@ public final class MetalTextureBridge {
             int rowStrideBytes
         );
 
+        int generateMipmaps(long handle);
+
         int destroyTexture(long handle);
 
         int configureTextureSampler(
@@ -176,6 +178,23 @@ public final class MetalTextureBridge {
             rowStrideBytes
         );
         requireSuccess("nativeUpdateTexture", status);
+    }
+
+    public static void generateMipmaps(long handle) {
+        if (handle <= 0L) {
+            throw new IllegalArgumentException("Texture handle must be positive.");
+        }
+
+        TextureRecord record = TEXTURES.get(handle);
+        if (record == null) {
+            throw new IllegalArgumentException("Unknown native texture handle: " + handle);
+        }
+        if (record.mipLevels() <= 1) {
+            return;
+        }
+
+        int status = nativeTextureBackend.generateMipmaps(handle);
+        requireSuccess("nativeGenerateTextureMipmaps", status);
     }
 
     public static void configureTextureSampler(
@@ -411,6 +430,11 @@ public final class MetalTextureBridge {
         @Override
         public int destroyTexture(long handle) {
             return NativeApi.nativeDestroyTexture(handle);
+        }
+
+        @Override
+        public int generateMipmaps(long handle) {
+            return NativeApi.nativeGenerateTextureMipmaps(handle);
         }
 
         @Override

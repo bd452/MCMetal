@@ -117,6 +117,9 @@ extern "C"
         int32_t data_length,
         int32_t row_stride_bytes);
 
+    int32_t mcmetal_swift_generate_texture_mipmaps(
+        int64_t handle);
+
     int32_t mcmetal_swift_destroy_texture(
         int64_t handle);
 

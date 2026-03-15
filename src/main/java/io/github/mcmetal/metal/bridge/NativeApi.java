@@ -76,6 +76,8 @@ public final class NativeApi {
         int rowStrideBytes
     );
 
+    public static native int nativeGenerateTextureMipmaps(long handle);
+
     public static native int nativeDestroyTexture(long handle);
 
     public static native int nativeConfigureTextureSampler(

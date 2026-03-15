@@ -63,7 +63,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Map Minecraft texture formats and usage flags to Metal pixel formats.
   - [x] Implement texture creation and region update upload path (`AbstractTexture`, `NativeImage`).
   - [x] Implement sampler state mapping and caching.
-  - [ ] Implement mipmap generation/update policy.
+  - [x] Implement mipmap generation/update policy.
   - [ ] Implement `RenderTarget` creation/bind/resize semantics.
   - [ ] Build render pass descriptor generation (color/depth/stencil load/store actions).
   - [ ] Validate framebuffer-equivalent behavior for off-screen passes.
