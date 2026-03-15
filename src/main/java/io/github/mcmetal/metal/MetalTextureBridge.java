@@ -65,7 +65,7 @@ public final class MetalTextureBridge {
 
         MetalTextureFormatMapper.MappedTextureFormat mapped = MetalTextureFormatMapper.mapOrThrow(internalFormat, format, type);
         int mipLevels = mipmapped ? computeMipLevels(width, height) : 1;
-        int usageFlags = USAGE_SAMPLED | (renderTarget ? USAGE_RENDER_TARGET : 0);
+        int usageFlags = computeUsageFlags(mapped, renderTarget);
 
         ByteBuffer payload = initialData == null ? null : initialData.duplicate();
         int payloadLength = payload == null ? 0 : payload.remaining();
@@ -188,6 +188,14 @@ public final class MetalTextureBridge {
 
     private static int levelDimension(int baseDimension, int mipLevel) {
         return Math.max(1, baseDimension >> mipLevel);
+    }
+
+    private static int computeUsageFlags(MetalTextureFormatMapper.MappedTextureFormat mapped, boolean renderTarget) {
+        int usageFlags = USAGE_SAMPLED;
+        if (renderTarget || mapped.depthStencil()) {
+            usageFlags |= USAGE_RENDER_TARGET;
+        }
+        return usageFlags;
     }
 
     private static long requiredByteCount(int a, int b, int c) {

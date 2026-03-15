@@ -75,6 +75,25 @@ class MetalTextureBridgeTest {
     }
 
     @Test
+    void createTextureMarksDepthStencilTexturesAsRenderTargets() {
+        long handle = MetalTextureBridge.createTexture(
+            MetalTextureFormatMapper.GL_DEPTH24_STENCIL8,
+            MetalTextureFormatMapper.GL_DEPTH_STENCIL,
+            MetalTextureFormatMapper.GL_UNSIGNED_INT_24_8,
+            32,
+            32,
+            false,
+            false,
+            null
+        );
+
+        assertEquals(1L, handle);
+        assertEquals(1, backend.createCalls);
+        assertEquals(MetalTextureFormatMapper.NATIVE_TEXTURE_FORMAT_DEPTH24_STENCIL8, backend.lastCreatePixelFormat);
+        assertEquals(MetalTextureBridge.USAGE_SAMPLED | MetalTextureBridge.USAGE_RENDER_TARGET, backend.lastCreateUsageFlags);
+    }
+
+    @Test
     void createTextureRejectsUndersizedInitialUploadPayload() {
         assertThrows(
             IllegalArgumentException.class,

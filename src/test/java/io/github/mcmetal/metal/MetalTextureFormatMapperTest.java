@@ -46,6 +46,19 @@ class MetalTextureFormatMapperTest {
     }
 
     @Test
+    void mapsUnsizedDepthStencilFloatTupleToNativeDepth32Stencil8() {
+        MetalTextureFormatMapper.MappedTextureFormat mapped = MetalTextureFormatMapper.mapOrThrow(
+            0,
+            MetalTextureFormatMapper.GL_DEPTH_STENCIL,
+            MetalTextureFormatMapper.GL_FLOAT_32_UNSIGNED_INT_24_8_REV
+        );
+
+        assertEquals(MetalTextureFormatMapper.NATIVE_TEXTURE_FORMAT_DEPTH32F_STENCIL8, mapped.nativePixelFormat());
+        assertEquals(8, mapped.bytesPerPixel());
+        assertTrue(mapped.depthStencil());
+    }
+
+    @Test
     void mapsSrgbInternalFormatToNativeRgbaSrgb() {
         MetalTextureFormatMapper.MappedTextureFormat mapped = MetalTextureFormatMapper.mapOrThrow(
             MetalTextureFormatMapper.GL_SRGB8_ALPHA8,
