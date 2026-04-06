@@ -64,7 +64,7 @@ Native implementation baseline: Swift-native runtime + C ABI JNI bridge.
   - [x] Implement texture creation and region update upload path (`AbstractTexture`, `NativeImage`).
   - [x] Implement sampler state mapping and caching.
   - [x] Implement mipmap generation/update policy.
-  - [ ] Implement `RenderTarget` creation/bind/resize semantics.
+  - [x] Implement `RenderTarget` creation/bind/resize semantics.
   - [ ] Build render pass descriptor generation (color/depth/stencil load/store actions).
   - [ ] Validate framebuffer-equivalent behavior for off-screen passes.
   - [ ] Validate post-processing and shadow/depth workflows.
